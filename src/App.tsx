@@ -1,7 +1,5 @@
-export default function App() {
-return (
-<div style={{ padding: 20 }}>
-<h1>OpenForm Working</h1>
-</div>
-);
-}
+import { Routes, Route, Navigate } from "react-router-dom";
+import Landing from "./pages/Landing";
+import Login from "./pages/Login";
+import Signup from "./pages/Signup";
+...
