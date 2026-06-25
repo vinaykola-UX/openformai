@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { FieldValue } from "firebase-admin/firestore";
-import { verifyAuth } from "../_lib/verify-auth";
-import { oauthClient } from "../_lib/google-oauth";
-import { getAdmin } from "../_lib/firebase-admin";
+import { verifyAuth } from "../_lib/verify-auth.js";
+import { oauthClient } from "../_lib/google-oauth.js";
+import { getAdmin } from "../_lib/firebase-admin.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
