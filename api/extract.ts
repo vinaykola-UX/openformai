@@ -25,6 +25,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let text = "";
 
     if (mt.includes("pdf") || name.endsWith(".pdf")) {
+      // @ts-ignore - pdf-parse has no types
       const mod: any = await import("pdf-parse");
       const pdfParse = mod.default || mod;
       const parsed = await pdfParse(buf);
@@ -33,6 +34,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       mt.includes("officedocument.wordprocessingml") ||
       name.endsWith(".docx")
     ) {
+      // @ts-ignore - mammoth types optional
       const mammoth: any = await import("mammoth");
       const result = await mammoth.extractRawText({ buffer: buf });
       text = result.value || "";
