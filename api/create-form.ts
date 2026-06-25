@@ -1,9 +1,9 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { google } from "googleapis";
 import { FieldValue } from "firebase-admin/firestore";
-import { verifyAuth } from "./_lib/verify-auth";
-import { oauthClient } from "./_lib/google-oauth";
-import { getAdmin } from "./_lib/firebase-admin";
+import { verifyAuth } from "./_lib/verify-auth.js";
+import { oauthClient } from "./_lib/google-oauth.js";
+import { getAdmin } from "./_lib/firebase-admin.js";
 
 type Question = {
   type: "MCQ" | "CHECKBOX" | "SHORT" | "PARAGRAPH" | "TRUE_FALSE";
