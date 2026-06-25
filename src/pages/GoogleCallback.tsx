@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { auth } from "../lib/firebase";
+import { exchangeGoogleCode } from "../lib/api";
+import { waitForAuthReady } from "../lib/firebase";
 
 export default function GoogleCallback() {
   const [params] = useSearchParams();
@@ -20,21 +21,19 @@ export default function GoogleCallback() {
       return;
     }
     (async () => {
-      const user = auth.currentUser;
-      if (!user) {
-        setMsg("Please sign in first.");
-        setTimeout(() => nav("/login"), 1500);
-        return;
-      }
-      const token = await user.getIdToken();
-      const res = await fetch(`/api/google/callback?code=${encodeURIComponent(code)}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
+      try {
+        const user = await waitForAuthReady();
+        if (!user) {
+          setMsg("Please sign in first.");
+          setTimeout(() => nav("/login"), 1500);
+          return;
+        }
+        await exchangeGoogleCode(code);
         setMsg("Connected! Redirecting...");
         setTimeout(() => nav("/dashboard"), 800);
-      } else {
-        setMsg("Connection failed: " + ((await res.json()).error || "unknown"));
+      } catch (e: any) {
+        console.error("[google-callback]", e);
+        setMsg("Connection failed: " + (e.message || "unknown"));
       }
     })();
   }, [params, nav]);
