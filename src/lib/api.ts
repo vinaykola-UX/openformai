@@ -1,10 +1,16 @@
-import { auth } from "./firebase";
+import { auth, waitForAuthReady } from "./firebase";
 
 async function authHeaders(json = true): Promise<Record<string, string>> {
-  const user = auth.currentUser;
-  if (!user) throw new Error("Not authenticated");
-  const token = await user.getIdToken();
-  const h: Record<string, string> = { Authorization: `Bearer ${token}` };
+  let user = auth.currentUser;
+  if (!user) user = await waitForAuthReady();
+  console.log("[api] Firebase user:", user);
+  console.log("[api] User UID:", user?.uid);
+  if (!user) throw new Error("Not authenticated. Please sign in again.");
+  const token = await user.getIdToken(/* forceRefresh */ false);
+  console.log("[api] Token exists:", !!token, "length:", token?.length);
+  const authHeader = `Bearer ${token}`;
+  console.log("[api] Authorization header:", authHeader.slice(0, 24) + "...");
+  const h: Record<string, string> = { Authorization: authHeader };
   if (json) h["Content-Type"] = "application/json";
   return h;
 }
@@ -12,11 +18,14 @@ async function authHeaders(json = true): Promise<Record<string, string>> {
 async function safeJson(res: Response): Promise<any> {
   const ct = res.headers.get("content-type") || "";
   if (ct.includes("application/json")) {
-    try { return await res.json(); } catch { return {}; }
+    try {
+      return await res.json();
+    } catch {
+      return {};
+    }
   }
   const text = await res.text();
-  // Avoid leaking HTML error pages into UI
-  return { error: text.slice(0, 300) || `HTTP ${res.status}` };
+  return { error: text.slice(0, 500) || `HTTP ${res.status}` };
 }
 
 async function call<T = any>(path: string, init: RequestInit): Promise<T> {
@@ -27,7 +36,10 @@ async function call<T = any>(path: string, init: RequestInit): Promise<T> {
     throw new Error(`Network error: ${e.message}`);
   }
   const data = await safeJson(res);
-  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  if (!res.ok) {
+    console.error(`[api] ${path} failed`, res.status, data);
+    throw new Error(data.error || `Request failed (${res.status})`);
+  }
   return data as T;
 }
 
@@ -64,9 +76,22 @@ export async function getGoogleAuthUrl(): Promise<string> {
   return data.url;
 }
 
+export async function exchangeGoogleCode(code: string) {
+  return call<{ ok: true }>(`/api/google/callback?code=${encodeURIComponent(code)}`, {
+    headers: await authHeaders(false),
+  });
+}
+
 export async function extractFileText(file: File): Promise<string> {
   const buf = await file.arrayBuffer();
-  const base64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+  // Chunked base64 to avoid call-stack overflow on large files
+  const bytes = new Uint8Array(buf);
+  let binary = "";
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + CHUNK)));
+  }
+  const base64 = btoa(binary);
   const data = await call<{ text: string }>("/api/extract", {
     method: "POST",
     headers: await authHeaders(),
