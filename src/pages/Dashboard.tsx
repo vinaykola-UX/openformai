@@ -58,22 +58,45 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!user) return;
-    const q = query(
-      collection(db, "forms"),
-      where("uid", "==", user.uid),
-      orderBy("createdAt", "desc")
-    );
+    setLoading(true);
+
+    const mapDocs = (snap: any): FormDoc[] => {
+      const list: FormDoc[] = snap.docs.map((d: any) => ({
+        id: d.id,
+        ...(d.data() as Omit<FormDoc, "id">),
+      }));
+      list.sort((a, b) => {
+        const at = a.createdAt?.toMillis?.() ?? 0;
+        const bt = b.createdAt?.toMillis?.() ?? 0;
+        return bt - at;
+      });
+      return list;
+    };
+
+    const baseQ = query(collection(db, "forms"), where("uid", "==", user.uid));
+    const orderedQ = query(baseQ, orderBy("createdAt", "desc"));
+
     const unsub = onSnapshot(
-      q,
+      orderedQ,
       (snap) => {
-        setForms(
-          snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<FormDoc, "id">) }))
-        );
+        setForms(mapDocs(snap));
         setLoading(false);
       },
       (err) => {
-        console.error("[dashboard] forms snapshot failed", err);
-        setLoading(false);
+        console.warn("[dashboard] ordered query failed, falling back", err);
+        // Composite index missing — fall back to unordered query, sort client-side.
+        const unsub2 = onSnapshot(
+          baseQ,
+          (snap) => {
+            setForms(mapDocs(snap));
+            setLoading(false);
+          },
+          (err2) => {
+            console.error("[dashboard] forms snapshot failed", err2);
+            setLoading(false);
+          }
+        );
+        return unsub2;
       }
     );
     return () => unsub();
