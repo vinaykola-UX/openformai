@@ -1,5 +1,7 @@
+// api/_lib/extract-content.ts
 // Shared content extraction used by /api/extract and /api/drive-import.
 import { GoogleGenAI } from "@google/genai";
+import { extractText, getDocumentProxy } from "unpdf";
 
 export async function extractContent(
   buf: Buffer,
@@ -10,11 +12,13 @@ export async function extractContent(
   const mt = (mimeType || "").toLowerCase();
 
   if (mt.includes("pdf") || name.endsWith(".pdf")) {
-    // @ts-ignore - pdf-parse has no types
-    const mod: any = await import("pdf-parse");
-    const pdfParse = mod.default || mod;
-    const parsed = await pdfParse(buf);
-    return (parsed.text || "").replace(/\r\n/g, "\n").trim();
+    // unpdf wraps pdfjs's serverless build — no DOMMatrix/Canvas deps,
+    // safe for Vercel's Node.js runtime.
+    const uint8 = new Uint8Array(buf);
+    const pdf = await getDocumentProxy(uint8);
+    const { text } = await extractText(pdf, { mergePages: true });
+    const raw = typeof text === "string" ? text : (text as string[]).join("\n");
+    return raw.replace(/\r\n/g, "\n").trim();
   }
 
   if (
