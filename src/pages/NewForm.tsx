@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowLeft, Sparkles, Wand2, CheckCircle2, ExternalLink } from "lucide-react";
+import { ArrowLeft, Sparkles, Wand2, CheckCircle2, ExternalLink, Upload, Link2, Loader2 } from "lucide-react";
 import Navbar from "../components/Navbar";
-import { generateQuestions, createForm, type ParsedQuestion } from "../lib/api";
+import { generateQuestions, createForm, extractFileText, extractDriveUrl, type ParsedQuestion } from "../lib/api";
 import QuestionPreview from "../components/QuestionPreview";
 
 const EXAMPLE = `1. What is the capital of France?
@@ -19,13 +19,52 @@ Answer: False
 
 export default function NewForm() {
   const nav = useNavigate();
+  const fileRef = useRef<HTMLInputElement>(null);
   const [title, setTitle] = useState("Untitled quiz");
   const [text, setText] = useState("");
+  const [driveUrl, setDriveUrl] = useState("");
+  const [importing, setImporting] = useState<"file" | "drive" | null>(null);
+  const [importMsg, setImportMsg] = useState("");
   const [questions, setQuestions] = useState<ParsedQuestion[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<{ responderUri: string; editUri: string } | null>(null);
+
+  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setError("");
+    setImportMsg("");
+    setImporting("file");
+    try {
+      const extracted = await extractFileText(file);
+      setText((prev) => (prev ? prev + "\n\n" + extracted : extracted));
+      setImportMsg(`Imported ${file.name} (${extracted.length.toLocaleString()} chars)`);
+    } catch (err: any) {
+      setError(err.message || "File import failed");
+    } finally {
+      setImporting(null);
+    }
+  }
+
+  async function importDrive() {
+    if (!driveUrl.trim()) return;
+    setError("");
+    setImportMsg("");
+    setImporting("drive");
+    try {
+      const extracted = await extractDriveUrl(driveUrl.trim());
+      setText((prev) => (prev ? prev + "\n\n" + extracted : extracted));
+      setImportMsg(`Imported from Drive (${extracted.length.toLocaleString()} chars)`);
+      setDriveUrl("");
+    } catch (err: any) {
+      setError(err.message || "Drive import failed");
+    } finally {
+      setImporting(null);
+    }
+  }
 
   async function generate() {
     setError("");
