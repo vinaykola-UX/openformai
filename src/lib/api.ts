@@ -99,3 +99,12 @@ export async function extractFileText(file: File): Promise<string> {
   });
   return data.text;
 }
+
+export async function extractDriveUrl(url: string): Promise<string> {
+  const data = await call<{ text: string }>("/api/drive-import", {
+    method: "POST",
+    headers: await authHeaders(),
+    body: JSON.stringify({ url }),
+  });
+  return data.text;
+}
