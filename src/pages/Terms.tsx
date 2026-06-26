@@ -1,91 +1,105 @@
 // src/pages/Terms.tsx
 import { Link } from "react-router-dom";
+import { ArrowLeft } from "lucide-react";
+import Navbar from "../components/Navbar";
+import Footer from "../components/Footer";
 
 export default function Terms() {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#FFF6F0] to-[#FFEDE3] dark:from-[#1A0E12] dark:to-[#120A0D] text-[#2A1015] dark:text-[#F7E9E3] transition-colors duration-300">
-      <div className="max-w-3xl mx-auto px-6 py-16 sm:py-24">
-        <Link
-          to="/"
-          className="inline-flex items-center gap-2 text-sm font-medium text-[#7A2E3A] dark:text-[#F4A98C] hover:opacity-80 transition-opacity mb-10"
-        >
-          ← Back to OpenForm
-        </Link>
-
-        <h1 className="text-4xl sm:text-5xl font-bold tracking-tight mb-3 bg-gradient-to-r from-[#7A2E3A] to-[#E8896B] bg-clip-text text-transparent">
-          Terms of Service
-        </h1>
-        <p className="text-sm text-[#8A5C63] dark:text-[#C9A29B] mb-12">
-          Last updated: June 2026
-        </p>
-
-        <div className="space-y-10 leading-relaxed">
-          <Section title="1. Acceptance of Terms">
-            By accessing or using OpenForm, you agree to be bound by these
-            Terms of Service. If you do not agree, please do not use our
-            service.
-          </Section>
-
-          <Section title="2. Description of Service">
-            OpenForm provides tools for creating, sharing, and managing
-            online forms and collecting responses. We may update or modify
-            features at any time.
-          </Section>
-
-          <Section title="3. Account Responsibilities">
-            You are responsible for maintaining the confidentiality of your
-            account credentials and for all activity that occurs under your
-            account.
-          </Section>
-
-          <Section title="4. Acceptable Use">
-            You agree not to use OpenForm for any unlawful purpose, to
-            distribute malicious content, or to attempt unauthorized access
-            to our systems or other users' data.
-          </Section>
-
-          <Section title="5. Subscription & Billing">
-            Paid plans, if applicable, will be billed according to the plan
-            you select. Fees are non-refundable except as required by law or
-            explicitly stated otherwise.
-          </Section>
-
-          <Section title="6. Intellectual Property">
-            OpenForm and its original content, features, and functionality
-            are owned by us and protected by applicable intellectual property
-            laws. Content you create using OpenForm remains yours.
-          </Section>
-
-          <Section title="7. Termination">
-            We may suspend or terminate your access to OpenForm if you violate
-            these Terms or engage in conduct that we deem harmful to the
-            service or other users.
-          </Section>
-
-          <Section title="8. Limitation of Liability">
-            OpenForm is provided "as is" without warranties of any kind. We
-            are not liable for any indirect, incidental, or consequential
-            damages arising from your use of the service.
-          </Section>
-
-          <Section title="9. Changes to Terms">
-            We may revise these Terms from time to time. Continued use of
-            OpenForm after changes constitutes acceptance of the updated
-            Terms.
-          </Section>
-
-          <Section title="10. Contact Us">
-            For questions about these Terms, please contact us at{" "}
-            <a
-              href="mailto:teamclassvision@gmail.com"
-              className="text-[#7A2E3A] dark:text-[#F4A98C] font-medium underline underline-offset-2 hover:opacity-80"
+    <div className="flex min-h-screen flex-col">
+      <Navbar />
+      <main className="flex-1">
+        <section className="relative overflow-hidden">
+          <div className="absolute inset-0 -z-10 bg-warm-gradient opacity-60 dark:opacity-20" />
+          <div className="mx-auto max-w-3xl px-4 py-16 sm:px-6 sm:py-24">
+            <Link
+              to="/"
+              className="mb-8 inline-flex items-center gap-2 text-sm font-medium text-brand hover:opacity-80"
             >
-              teamclassvision@gmail.com
-            </a>
-            .
-          </Section>
-        </div>
-      </div>
+              <ArrowLeft className="h-4 w-4" /> Back to OpenForm
+            </Link>
+
+            <h1 className="font-display text-4xl font-bold tracking-tight sm:text-5xl">
+              <span className="bg-brand-gradient bg-clip-text text-transparent">
+                Terms of Service
+              </span>
+            </h1>
+            <p className="mt-3 text-sm text-ink/60 dark:text-[#F5EDE7]/60">
+              Last updated: June 2026
+            </p>
+
+            <div className="card mt-10 space-y-8 p-6 sm:p-10">
+              <Section title="1. Acceptance of Terms">
+                By accessing or using OpenForm, you agree to be bound by these
+                Terms of Service. If you do not agree, please do not use our
+                service.
+              </Section>
+
+              <Section title="2. Description of Service">
+                OpenForm uses AI to parse pasted questions and generate Google
+                Forms on your connected Google account. We may update or
+                modify features at any time.
+              </Section>
+
+              <Section title="3. Account Responsibilities">
+                You are responsible for maintaining the confidentiality of
+                your account credentials and for all activity that occurs
+                under your account, including forms created via your
+                connected Google account.
+              </Section>
+
+              <Section title="4. Acceptable Use">
+                You agree not to use OpenForm for any unlawful purpose, to
+                distribute malicious content, or to attempt unauthorized
+                access to our systems or other users' data.
+              </Section>
+
+              <Section title="5. Subscription & Billing">
+                OpenForm is currently free during beta. If we introduce paid
+                plans in the future, fees will be clearly disclosed before
+                you are charged.
+              </Section>
+
+              <Section title="6. Intellectual Property">
+                OpenForm and its original content, features, and
+                functionality are owned by us and protected by applicable
+                intellectual property laws. Content and forms you create
+                using OpenForm remain yours.
+              </Section>
+
+              <Section title="7. Termination">
+                We may suspend or terminate your access to OpenForm if you
+                violate these Terms or engage in conduct that we deem harmful
+                to the service or other users.
+              </Section>
+
+              <Section title="8. Limitation of Liability">
+                OpenForm is provided "as is" without warranties of any kind.
+                We are not liable for any indirect, incidental, or
+                consequential damages arising from your use of the service.
+              </Section>
+
+              <Section title="9. Changes to Terms">
+                We may revise these Terms from time to time. Continued use of
+                OpenForm after changes constitutes acceptance of the updated
+                Terms.
+              </Section>
+
+              <Section title="10. Contact Us">
+                For questions about these Terms, please contact us at{" "}
+                <a
+                  href="mailto:teamclassvision@gmail.com"
+                  className="font-medium text-brand underline underline-offset-2 hover:opacity-80"
+                >
+                  teamclassvision@gmail.com
+                </a>
+                .
+              </Section>
+            </div>
+          </div>
+        </section>
+      </main>
+      <Footer />
     </div>
   );
 }
@@ -99,10 +113,10 @@ function Section({
 }) {
   return (
     <section>
-      <h2 className="text-xl font-semibold mb-3 text-[#5C1F2A] dark:text-[#F7E9E3]">
-        {title}
-      </h2>
-      <p className="text-[#5A3A3F] dark:text-[#D8B9B2]">{children}</p>
+      <h2 className="font-display text-lg font-semibold">{title}</h2>
+      <p className="mt-2 text-sm leading-relaxed text-ink/70 dark:text-[#F5EDE7]/70">
+        {children}
+      </p>
     </section>
   );
 }
