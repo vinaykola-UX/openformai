@@ -62,8 +62,8 @@ export default function Login() {
               <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} className="input" />
             </div>
             {error && <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-300">{error}</p>}
-            <button type="submit" className="btn-primary w-full" disabled={loading}>
-              {loading ? "Signing in..." : "Sign in"}
+            <button type="submit" className="btn-primary w-full" disabled={loading_}>
+              {loading_ ? "Signing in..." : "Sign in"}
             </button>
           </form>
           <div className="my-5 flex items-center gap-3 text-xs text-ink/40">
