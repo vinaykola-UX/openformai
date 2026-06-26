@@ -1,16 +1,20 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import Navbar from "../components/Navbar";
 import { Sparkles } from "lucide-react";
 
 export default function Login() {
-  const { signIn, signInGoogle } = useAuth();
+  const { user, loading, signIn, signInGoogle } = useAuth();
   const nav = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [loading_, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!loading && user) nav("/dashboard", { replace: true });
+  }, [user, loading, nav]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
