@@ -83,7 +83,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (parsed.kind === "google") {
       const exp = GOOGLE_EXPORTS[parsed.type];
-      downloadUrl = `https://docs.google.com/${parsed.type}/d/${parsed.id}/export?format=${exp.mime === "application/pdf" ? "pdf" : "csv"}`;
+      downloadUrl = `https://docs.google.com/${parsed.type}/d/${parsed.id}/export?format=${exp.format}`;
       forcedExt = exp.ext;
       forcedMime = exp.mime;
     } else {
