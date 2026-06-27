@@ -1,7 +1,9 @@
-import { Link, useNavigate } from "react-router-dom";
-import { Moon, Sun, LogOut, LayoutDashboard, Sparkles } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Moon, Sun, LayoutDashboard, Sparkles } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { useTheme } from "../contexts/ThemeContext";
+import UserMenu from "./UserMenu";
+
 
 export default function Navbar() {
   const { user, logout } = useAuth();
