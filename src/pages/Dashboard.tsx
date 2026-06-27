@@ -22,6 +22,7 @@ import {
   Loader2,
 } from "lucide-react";
 import Navbar from "../components/Navbar";
+import CopyLinkButton from "../components/CopyLinkButton";
 import Footer from "../components/Footer";
 import { useAuth } from "../contexts/AuthContext";
 import { db } from "../lib/firebase";
