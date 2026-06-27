@@ -158,7 +158,7 @@ export default function NewForm() {
                 <input
                   ref={fileRef}
                   type="file"
-                  accept=".pdf,.docx,.txt,.md,.csv,image/*"
+                  accept=".pdf,.docx,.xlsx,.xls,.txt,.md,.csv,image/*"
                   className="hidden"
                   onChange={onFile}
                 />
