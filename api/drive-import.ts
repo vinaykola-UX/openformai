@@ -11,10 +11,10 @@ export const config = {
 const MAX_BYTES = 25 * 1024 * 1024; // 25 MB cap from Drive
 
 // Google Docs / Sheets / Slides export MIME types
-const GOOGLE_EXPORTS: Record<string, { mime: string; ext: string }> = {
-  document: { mime: "application/pdf", ext: ".pdf" },
-  spreadsheets: { mime: "text/csv", ext: ".csv" },
-  presentation: { mime: "application/pdf", ext: ".pdf" },
+const GOOGLE_EXPORTS: Record<string, { mime: string; ext: string; format: string }> = {
+  document: { mime: "application/pdf", ext: ".pdf", format: "pdf" },
+  spreadsheets: { mime: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", ext: ".xlsx", format: "xlsx" },
+  presentation: { mime: "application/pdf", ext: ".pdf", format: "pdf" },
 };
 
 function parseDriveUrl(input: string):
@@ -83,7 +83,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (parsed.kind === "google") {
       const exp = GOOGLE_EXPORTS[parsed.type];
-      downloadUrl = `https://docs.google.com/${parsed.type}/d/${parsed.id}/export?format=${exp.mime === "application/pdf" ? "pdf" : "csv"}`;
+      downloadUrl = `https://docs.google.com/${parsed.type}/d/${parsed.id}/export?format=${exp.format}`;
       forcedExt = exp.ext;
       forcedMime = exp.mime;
     } else {
