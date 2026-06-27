@@ -32,6 +32,24 @@ export async function extractContent(
   }
 
   if (
+    mt.includes("spreadsheetml.sheet") ||
+    mt.includes("ms-excel") ||
+    name.endsWith(".xlsx") ||
+    name.endsWith(".xls")
+  ) {
+    // @ts-ignore - xlsx types optional
+    const XLSX: any = await import("xlsx");
+    const wb = XLSX.read(buf, { type: "buffer" });
+    const parts: string[] = [];
+    for (const sheetName of wb.SheetNames) {
+      const sheet = wb.Sheets[sheetName];
+      const csv: string = XLSX.utils.sheet_to_csv(sheet);
+      if (csv.trim()) parts.push(`# ${sheetName}\n${csv}`);
+    }
+    return parts.join("\n\n").trim();
+  }
+
+  if (
     mt.startsWith("text/") ||
     name.endsWith(".txt") ||
     name.endsWith(".md") ||
