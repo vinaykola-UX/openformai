@@ -40,8 +40,3 @@ export default function Navbar() {
     </header>
   );
 }
-
-      </div>
-    </header>
-  );
-}
