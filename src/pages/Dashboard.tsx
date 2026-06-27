@@ -328,6 +328,7 @@ function FormCard({ form }: { form: FormDoc }) {
         >
           <Pencil className="h-3.5 w-3.5" /> Edit
         </a>
+        <CopyLinkButton url={form.responderUri} size="sm" label="Copy link" />
       </div>
     </div>
   );
