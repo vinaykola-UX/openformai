@@ -22,6 +22,7 @@ import {
   Loader2,
 } from "lucide-react";
 import Navbar from "../components/Navbar";
+import CopyLinkButton from "../components/CopyLinkButton";
 import Footer from "../components/Footer";
 import { useAuth } from "../contexts/AuthContext";
 import { db } from "../lib/firebase";
@@ -327,6 +328,7 @@ function FormCard({ form }: { form: FormDoc }) {
         >
           <Pencil className="h-3.5 w-3.5" /> Edit
         </a>
+        <CopyLinkButton url={form.responderUri} size="sm" label="Copy link" />
       </div>
     </div>
   );

@@ -4,6 +4,7 @@ import { ArrowLeft, Sparkles, Wand2, CheckCircle2, ExternalLink, Upload, Link2, 
 import Navbar from "../components/Navbar";
 import { generateQuestions, createForm, extractFileText, extractDriveUrl, type ParsedQuestion } from "../lib/api";
 import QuestionPreview from "../components/QuestionPreview";
+import CopyLinkButton from "../components/CopyLinkButton";
 
 const EXAMPLE = `1. What is the capital of France?
 a) London
@@ -107,7 +108,16 @@ export default function NewForm() {
             </div>
             <h1 className="font-display text-2xl font-bold">Your form is live!</h1>
             <p className="mt-2 text-ink/70 dark:text-[#F5EDE7]/70">Share the responder link with your students.</p>
-            <div className="mt-6 flex flex-col gap-3">
+            <div className="mt-5 flex items-center gap-2 rounded-2xl border border-brand/15 bg-cream/70 px-3 py-2 text-left dark:border-white/10 dark:bg-white/5">
+              <input
+                readOnly
+                value={result.responderUri}
+                onFocus={(e) => e.currentTarget.select()}
+                className="flex-1 truncate bg-transparent text-xs text-ink/80 outline-none dark:text-[#F5EDE7]/80"
+              />
+              <CopyLinkButton url={result.responderUri} size="sm" label="Copy" />
+            </div>
+            <div className="mt-4 flex flex-col gap-3">
               <a href={result.responderUri} target="_blank" rel="noreferrer" className="btn-primary">
                 <ExternalLink className="h-4 w-4" /> Open responder link
               </a>
