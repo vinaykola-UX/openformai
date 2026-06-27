@@ -154,7 +154,7 @@ export default function NewForm() {
                 <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-ink/60 dark:text-[#F5EDE7]/60">
                   <Upload className="h-3.5 w-3.5" /> Upload file
                 </div>
-                <p className="mb-3 text-xs text-ink/60 dark:text-[#F5EDE7]/60">PDF, DOCX, TXT or image (max 15 MB).</p>
+                <p className="mb-3 text-xs text-ink/60 dark:text-[#F5EDE7]/60">PDF, DOCX, XLSX, TXT or image (max 15 MB).</p>
                 <input
                   ref={fileRef}
                   type="file"
