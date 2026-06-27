@@ -4,6 +4,7 @@ import { ArrowLeft, Sparkles, Wand2, CheckCircle2, ExternalLink, Upload, Link2, 
 import Navbar from "../components/Navbar";
 import { generateQuestions, createForm, extractFileText, extractDriveUrl, type ParsedQuestion } from "../lib/api";
 import QuestionPreview from "../components/QuestionPreview";
+import CopyLinkButton from "../components/CopyLinkButton";
 
 const EXAMPLE = `1. What is the capital of France?
 a) London
