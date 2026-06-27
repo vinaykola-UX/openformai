@@ -1,12 +1,13 @@
-import { Link, useNavigate } from "react-router-dom";
-import { Moon, Sun, LogOut, LayoutDashboard, Sparkles } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Moon, Sun, LayoutDashboard, Sparkles } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { useTheme } from "../contexts/ThemeContext";
+import UserMenu from "./UserMenu";
+
 
 export default function Navbar() {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const { theme, toggle } = useTheme();
-  const nav = useNavigate();
 
   return (
     <header className="sticky top-0 z-40 border-b border-brand/5 bg-cream/80 backdrop-blur-xl dark:bg-[#1A0E12]/80 dark:border-white/5">
@@ -26,16 +27,7 @@ export default function Navbar() {
               <Link to="/dashboard" className="btn-ghost hidden sm:inline-flex">
                 <LayoutDashboard className="h-4 w-4" /> Dashboard
               </Link>
-              <button
-                onClick={async () => {
-                  await logout();
-                  nav("/");
-                }}
-                className="btn-ghost"
-              >
-                <LogOut className="h-4 w-4" />
-                <span className="hidden sm:inline">Logout</span>
-              </button>
+              <UserMenu />
             </>
           ) : (
             <>
