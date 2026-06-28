@@ -140,16 +140,24 @@ export default function UserMenu() {
               {busy === "deactivate" ? "Deactivating…" : "Deactivate account"}
             </MenuButton>
             <MenuButton
-              onClick={handleDelete}
+              onClick={openDelete}
               icon={<Trash2 className="h-4 w-4" />}
               danger
               disabled={!!busy}
             >
-              {busy === "delete" ? "Deleting…" : "Delete account"}
+              Delete account
             </MenuButton>
           </div>
         </div>
       )}
+      <DeleteAccountDialog
+        open={deleteOpen}
+        onClose={() => setDeleteOpen(false)}
+        onDeleted={() => {
+          setDeleteOpen(false);
+          nav("/");
+        }}
+      />
     </div>
   );
 }
