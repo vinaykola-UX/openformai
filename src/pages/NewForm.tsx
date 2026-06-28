@@ -245,15 +245,31 @@ export default function NewForm() {
 
         {questions && (
           <div className="mt-8">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="font-display text-xl font-bold">Preview · {questions.length} questions</h2>
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="font-display text-xl font-bold">Preview · {questions.length} questions</h2>
+                {meta && meta.estimatedMinutes > 0 && (
+                  <p className="mt-1 text-xs text-ink/60 dark:text-[#F5EDE7]/60">
+                    Estimated time to complete: <span className="font-semibold text-brand">~{meta.estimatedMinutes} min</span>
+                  </p>
+                )}
+              </div>
               <button onClick={publish} disabled={creating} className="btn-primary">
                 {creating ? "Creating Google Form..." : "Create Google Form"}
               </button>
             </div>
+            {meta && meta.warnings.length > 0 && (
+              <div className="mb-4 space-y-2">
+                {meta.warnings.map((w, i) => (
+                  <div key={i} className="rounded-xl border border-amber-300/60 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-500/30 dark:bg-amber-950/30 dark:text-amber-200">
+                    ⚠ {w.message}
+                  </div>
+                ))}
+              </div>
+            )}
             <div className="space-y-3">
               {questions.map((q, i) => (
-                <QuestionPreview key={i} q={q} index={i} />
+                <QuestionPreview key={i} q={q} index={i} onApplySuggestion={() => applySuggestion(i)} />
               ))}
             </div>
           </div>
