@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   collection,
+  doc,
   onSnapshot,
   orderBy,
   query,
@@ -20,10 +21,13 @@ import {
   ChevronRight,
   Search,
   Loader2,
+  Lock,
+  Infinity as InfinityIcon,
 } from "lucide-react";
 import Navbar from "../components/Navbar";
 import CopyLinkButton from "../components/CopyLinkButton";
 import Footer from "../components/Footer";
+import UnlockDialog from "../components/UnlockDialog";
 import { useAuth } from "../contexts/AuthContext";
 import { db } from "../lib/firebase";
 
