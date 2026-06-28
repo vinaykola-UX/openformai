@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   collection,
+  doc,
   onSnapshot,
   orderBy,
   query,
@@ -20,10 +21,13 @@ import {
   ChevronRight,
   Search,
   Loader2,
+  Lock,
+  Infinity as InfinityIcon,
 } from "lucide-react";
 import Navbar from "../components/Navbar";
 import CopyLinkButton from "../components/CopyLinkButton";
 import Footer from "../components/Footer";
+import UnlockDialog from "../components/UnlockDialog";
 import { useAuth } from "../contexts/AuthContext";
 import { db } from "../lib/firebase";
 
@@ -56,6 +60,18 @@ export default function Dashboard() {
   const [forms, setForms] = useState<FormDoc[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [unlocked, setUnlocked] = useState(false);
+  const [showUnlock, setShowUnlock] = useState(false);
+  const FREE_LIMIT = 5;
+
+  useEffect(() => {
+    if (!user) return;
+    const unsub = onSnapshot(doc(db, "users", user.uid), (snap) => {
+      setUnlocked(!!snap.data()?.unlocked);
+    });
+    return () => unsub();
+  }, [user]);
+
 
   useEffect(() => {
     if (!user) return;
@@ -174,6 +190,37 @@ export default function Dashboard() {
             />
           </div>
 
+          {/* Usage / plan */}
+          <div className="card mt-4 flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <div className="grid h-11 w-11 place-items-center rounded-2xl bg-peach/40 text-brand">
+                {unlocked ? <InfinityIcon className="h-5 w-5" /> : <Lock className="h-5 w-5" />}
+              </div>
+              <div className="min-w-0">
+                <div className="text-xs font-semibold uppercase tracking-wide text-ink/60 dark:text-[#F5EDE7]/60">
+                  Plan
+                </div>
+                <div className="font-display text-base font-bold">
+                  {unlocked ? "Unlimited (unlocked)" : `Free · ${Math.min(forms.length, FREE_LIMIT)} / ${FREE_LIMIT} forms used`}
+                </div>
+                {!unlocked && (
+                  <div className="mt-1 h-1.5 w-48 max-w-full overflow-hidden rounded-full bg-cream dark:bg-white/10">
+                    <div
+                      className="h-full bg-brand transition-all"
+                      style={{ width: `${Math.min(100, (forms.length / FREE_LIMIT) * 100)}%` }}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+            {!unlocked && (
+              <button onClick={() => setShowUnlock(true)} className="btn-secondary self-start sm:self-auto">
+                <Lock className="h-4 w-4" /> Enter passcode
+              </button>
+            )}
+          </div>
+
+
           {/* Quick actions */}
           <div className="mt-8 grid gap-4 lg:grid-cols-3">
             <QuickAction
@@ -234,6 +281,14 @@ export default function Dashboard() {
       </main>
 
       <Footer />
+
+      <UnlockDialog
+        open={showUnlock}
+        used={forms.length}
+        limit={FREE_LIMIT}
+        onClose={() => setShowUnlock(false)}
+        onUnlocked={() => setShowUnlock(false)}
+      />
     </div>
   );
 }

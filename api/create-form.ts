@@ -93,9 +93,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const { db } = getAdmin();
     const userSnap = await db.collection("users").doc(uid).get();
-    const refreshToken = userSnap.data()?.googleRefreshToken;
+    const userData = userSnap.data() || {};
+    const refreshToken = userData.googleRefreshToken;
     if (!refreshToken) {
       return res.status(400).json({ error: "Google account not connected. Visit /connect-google." });
+    }
+
+    // Free-tier limit: 5 forms unless unlocked with passcode.
+    const FREE_LIMIT = 5;
+    if (!userData.unlocked) {
+      const countSnap = await db.collection("forms").where("uid", "==", uid).count().get();
+      const used = countSnap.data().count;
+      if (used >= FREE_LIMIT) {
+        return res.status(403).json({
+          error: `You've reached the free limit of ${FREE_LIMIT} forms. Enter the unlock passcode to continue.`,
+          code: "LIMIT_REACHED",
+          limit: FREE_LIMIT,
+          used,
+        });
+      }
     }
 
     const client = oauthClient();
