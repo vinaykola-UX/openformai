@@ -17,8 +17,18 @@ const LABELS: Record<ParsedQuestion["type"], string> = {
   PARAGRAPH: "Paragraph",
 };
 
-export default function QuestionPreview({ q, index }: { q: ParsedQuestion; index: number }) {
+export default function QuestionPreview({
+  q,
+  index,
+  onApplySuggestion,
+}: {
+  q: ParsedQuestion;
+  index: number;
+  onApplySuggestion?: () => void;
+}) {
   const Icon = ICONS[q.type];
+  const hasMultiCorrect =
+    q.type === "MCQ" && Array.isArray(q.correctAnswer) && q.correctAnswer.length > 1;
   return (
     <div className="card p-5">
       <div className="mb-3 flex items-start justify-between gap-3">
@@ -28,13 +38,43 @@ export default function QuestionPreview({ q, index }: { q: ParsedQuestion; index
           </div>
           <div>
             <p className="font-semibold text-ink dark:text-[#F5EDE7]">{q.title}</p>
-            <span className="chip mt-2">
-              <Icon className="h-3 w-3" /> {LABELS[q.type]}
-              {q.points ? ` · ${q.points} pts` : ""}
-            </span>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <span className="chip">
+                <Icon className="h-3 w-3" /> {LABELS[q.type]}
+                {q.points ? ` · ${q.points} pts` : ""}
+              </span>
+              {typeof q.estimatedSeconds === "number" && (
+                <span className="chip">~{q.estimatedSeconds}s</span>
+              )}
+              {hasMultiCorrect && (
+                <span className="chip border-amber-400 bg-amber-50 text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+                  ⚠ Multiple correct in single-answer MCQ
+                </span>
+              )}
+            </div>
           </div>
         </div>
       </div>
+      {q.suggestedTitle && (
+        <div className="mb-3 ml-10 rounded-xl border border-brand/20 bg-peach/30 p-3 text-sm dark:bg-white/5">
+          <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-brand">
+            Suggested rewording
+          </div>
+          <p className="text-ink/80 dark:text-[#F5EDE7]/80">{q.suggestedTitle}</p>
+          {q.clarityNote && (
+            <p className="mt-1 text-xs text-ink/60 dark:text-[#F5EDE7]/60">{q.clarityNote}</p>
+          )}
+          {onApplySuggestion && (
+            <button
+              type="button"
+              onClick={onApplySuggestion}
+              className="mt-2 text-xs font-semibold text-brand hover:underline"
+            >
+              Apply suggestion
+            </button>
+          )}
+        </div>
+      )}
       {q.options && q.options.length > 0 && (
         <ul className="ml-10 space-y-1.5">
           {q.options.map((opt, i) => {
