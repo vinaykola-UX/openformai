@@ -33,6 +33,7 @@ export default function NewForm() {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<{ responderUri: string; editUri: string } | null>(null);
+  const [unlock, setUnlock] = useState<{ open: boolean; used?: number; limit?: number }>({ open: false });
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -103,9 +104,13 @@ export default function NewForm() {
       const r = await createForm(title, questions);
       setResult(r);
     } catch (err: any) {
-      setError(err.message);
-      if (err.message?.toLowerCase().includes("google")) {
-        setTimeout(() => nav("/connect-google"), 1500);
+      if (err?.code === "LIMIT_REACHED") {
+        setUnlock({ open: true, used: err?.data?.used, limit: err?.data?.limit });
+      } else {
+        setError(err.message);
+        if (err.message?.toLowerCase().includes("google")) {
+          setTimeout(() => nav("/connect-google"), 1500);
+        }
       }
     } finally {
       setCreating(false);
