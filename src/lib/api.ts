@@ -50,15 +50,29 @@ export type ParsedQuestion = {
   correctAnswer?: string | string[];
   points?: number;
   required?: boolean;
+  suggestedTitle?: string;
+  clarityNote?: string;
+  estimatedSeconds?: number;
 };
 
-export async function generateQuestions(text: string): Promise<ParsedQuestion[]> {
-  const data = await call<{ questions: ParsedQuestion[] }>("/api/generate", {
+export type GenerateMeta = {
+  estimatedMinutes: number;
+  estimatedSeconds: number;
+  warnings: { index: number; type: string; message: string }[];
+};
+
+export async function generateQuestions(
+  text: string
+): Promise<{ questions: ParsedQuestion[]; meta: GenerateMeta }> {
+  const data = await call<{ questions: ParsedQuestion[]; meta?: GenerateMeta }>("/api/generate", {
     method: "POST",
     headers: await authHeaders(),
     body: JSON.stringify({ text }),
   });
-  return data.questions || [];
+  return {
+    questions: data.questions || [],
+    meta: data.meta || { estimatedMinutes: 0, estimatedSeconds: 0, warnings: [] },
+  };
 }
 
 export async function createForm(title: string, questions: ParsedQuestion[]) {

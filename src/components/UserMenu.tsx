@@ -11,22 +11,17 @@ import {
   Trash2,
   User as UserIcon,
 } from "lucide-react";
-import {
-  deleteUser,
-  GoogleAuthProvider,
-  reauthenticateWithPopup,
-  reauthenticateWithCredential,
-  EmailAuthProvider,
-} from "firebase/auth";
-import { doc, setDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
+import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { useAuth } from "../contexts/AuthContext";
-import { auth, db } from "../lib/firebase";
+import { db } from "../lib/firebase";
+import DeleteAccountDialog from "./DeleteAccountDialog";
 
 export default function UserMenu() {
   const { user, logout } = useAuth();
   const nav = useNavigate();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -77,57 +72,11 @@ export default function UserMenu() {
     }
   }
 
-  async function reauth() {
-    const u = auth.currentUser;
-    if (!u) throw new Error("Not signed in");
-    const providerId = u.providerData[0]?.providerId;
-    if (providerId === "google.com") {
-      await reauthenticateWithPopup(u, new GoogleAuthProvider());
-    } else {
-      const pw = window.prompt("Please re-enter your password to confirm deletion:");
-      if (!pw) throw new Error("Password required to delete account");
-      const cred = EmailAuthProvider.credential(u.email || "", pw);
-      await reauthenticateWithCredential(u, cred);
-    }
+  function openDelete() {
+    setOpen(false);
+    setDeleteOpen(true);
   }
 
-  async function handleDelete() {
-    if (!user) return;
-    const confirm1 = window.confirm(
-      "Permanently delete your account?\n\nThis cannot be undone. Your profile and forms metadata will be removed."
-    );
-    if (!confirm1) return;
-    const typed = window.prompt('Type "DELETE" to confirm permanent deletion:');
-    if (typed !== "DELETE") {
-      alert("Deletion cancelled.");
-      return;
-    }
-    setBusy("delete");
-    try {
-      const u = auth.currentUser!;
-      try {
-        await deleteDoc(doc(db, "users", u.uid));
-      } catch (e) {
-        console.warn("[delete] failed removing user doc", e);
-      }
-      try {
-        await deleteUser(u);
-      } catch (e: any) {
-        if (e?.code === "auth/requires-recent-login") {
-          await reauth();
-          await deleteUser(auth.currentUser!);
-        } else {
-          throw e;
-        }
-      }
-      nav("/");
-    } catch (e: any) {
-      alert(e.message || "Failed to delete account");
-    } finally {
-      setBusy(null);
-      setOpen(false);
-    }
-  }
 
   return (
     <div className="relative" ref={ref}>
@@ -191,16 +140,24 @@ export default function UserMenu() {
               {busy === "deactivate" ? "Deactivating…" : "Deactivate account"}
             </MenuButton>
             <MenuButton
-              onClick={handleDelete}
+              onClick={openDelete}
               icon={<Trash2 className="h-4 w-4" />}
               danger
               disabled={!!busy}
             >
-              {busy === "delete" ? "Deleting…" : "Delete account"}
+              Delete account
             </MenuButton>
           </div>
         </div>
       )}
+      <DeleteAccountDialog
+        open={deleteOpen}
+        onClose={() => setDeleteOpen(false)}
+        onDeleted={() => {
+          setDeleteOpen(false);
+          nav("/");
+        }}
+      />
     </div>
   );
 }
