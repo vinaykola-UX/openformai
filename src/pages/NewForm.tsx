@@ -5,6 +5,7 @@ import Navbar from "../components/Navbar";
 import { generateQuestions, createForm, extractFileText, extractDriveUrl, type ParsedQuestion } from "../lib/api";
 import QuestionPreview from "../components/QuestionPreview";
 import CopyLinkButton from "../components/CopyLinkButton";
+import UnlockDialog from "../components/UnlockDialog";
 
 const EXAMPLE = `1. What is the capital of France?
 a) London
