@@ -281,6 +281,14 @@ export default function Dashboard() {
       </main>
 
       <Footer />
+
+      <UnlockDialog
+        open={showUnlock}
+        used={forms.length}
+        limit={FREE_LIMIT}
+        onClose={() => setShowUnlock(false)}
+        onUnlocked={() => setShowUnlock(false)}
+      />
     </div>
   );
 }
