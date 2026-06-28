@@ -27,6 +27,7 @@ export default function NewForm() {
   const [importing, setImporting] = useState<"file" | "drive" | null>(null);
   const [importMsg, setImportMsg] = useState("");
   const [questions, setQuestions] = useState<ParsedQuestion[] | null>(null);
+  const [meta, setMeta] = useState<{ estimatedMinutes: number; warnings: { index: number; type: string; message: string }[] } | null>(null);
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
@@ -71,13 +72,26 @@ export default function NewForm() {
     setError("");
     setLoading(true);
     try {
-      const qs = await generateQuestions(text);
+      const { questions: qs, meta: m } = await generateQuestions(text);
       setQuestions(qs);
+      setMeta(m);
     } catch (err: any) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
+  }
+
+  function applySuggestion(i: number) {
+    setQuestions((prev) => {
+      if (!prev) return prev;
+      const next = [...prev];
+      const q = next[i];
+      if (q.suggestedTitle) {
+        next[i] = { ...q, title: q.suggestedTitle, suggestedTitle: undefined, clarityNote: undefined };
+      }
+      return next;
+    });
   }
 
   async function publish() {
