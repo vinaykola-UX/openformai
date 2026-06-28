@@ -281,6 +281,16 @@ export default function NewForm() {
           </div>
         )}
       </main>
+      <UnlockDialog
+        open={unlock.open}
+        used={unlock.used}
+        limit={unlock.limit}
+        onClose={() => setUnlock({ open: false })}
+        onUnlocked={() => {
+          setUnlock({ open: false });
+          publish();
+        }}
+      />
     </div>
   );
 }
