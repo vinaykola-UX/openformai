@@ -38,9 +38,25 @@ async function call<T = any>(path: string, init: RequestInit): Promise<T> {
   const data = await safeJson(res);
   if (!res.ok) {
     console.error(`[api] ${path} failed`, res.status, data);
-    throw new Error(data.error || `Request failed (${res.status})`);
+    const err = new Error(data.error || `Request failed (${res.status})`) as Error & {
+      code?: string;
+      status?: number;
+      data?: any;
+    };
+    err.code = data.code;
+    err.status = res.status;
+    err.data = data;
+    throw err;
   }
   return data as T;
+}
+
+export async function unlockAccount(passcode: string) {
+  return call<{ ok: true; unlocked: true }>("/api/unlock", {
+    method: "POST",
+    headers: await authHeaders(),
+    body: JSON.stringify({ passcode }),
+  });
 }
 
 export type ParsedQuestion = {
