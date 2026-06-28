@@ -11,16 +11,10 @@ import {
   Trash2,
   User as UserIcon,
 } from "lucide-react";
-import {
-  deleteUser,
-  GoogleAuthProvider,
-  reauthenticateWithPopup,
-  reauthenticateWithCredential,
-  EmailAuthProvider,
-} from "firebase/auth";
-import { doc, setDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
+import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { useAuth } from "../contexts/AuthContext";
-import { auth, db } from "../lib/firebase";
+import { db } from "../lib/firebase";
+import DeleteAccountDialog from "./DeleteAccountDialog";
 
 export default function UserMenu() {
   const { user, logout } = useAuth();
