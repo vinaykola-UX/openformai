@@ -60,6 +60,18 @@ export default function Dashboard() {
   const [forms, setForms] = useState<FormDoc[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [unlocked, setUnlocked] = useState(false);
+  const [showUnlock, setShowUnlock] = useState(false);
+  const FREE_LIMIT = 5;
+
+  useEffect(() => {
+    if (!user) return;
+    const unsub = onSnapshot(doc(db, "users", user.uid), (snap) => {
+      setUnlocked(!!snap.data()?.unlocked);
+    });
+    return () => unsub();
+  }, [user]);
+
 
   useEffect(() => {
     if (!user) return;
