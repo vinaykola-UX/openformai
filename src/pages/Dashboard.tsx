@@ -62,7 +62,8 @@ export default function Dashboard() {
   const [search, setSearch] = useState("");
   const [unlocked, setUnlocked] = useState(false);
   const [showUnlock, setShowUnlock] = useState(false);
-  const FREE_LIMIT = 5;
+  const DAILY_LIMIT = 5;
+  const TOTAL_LIMIT = 80;
 
   useEffect(() => {
     if (!user) return;
