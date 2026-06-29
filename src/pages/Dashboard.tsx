@@ -62,7 +62,8 @@ export default function Dashboard() {
   const [search, setSearch] = useState("");
   const [unlocked, setUnlocked] = useState(false);
   const [showUnlock, setShowUnlock] = useState(false);
-  const FREE_LIMIT = 5;
+  const DAILY_LIMIT = 5;
+  const TOTAL_LIMIT = 80;
 
   useEffect(() => {
     if (!user) return;
@@ -129,6 +130,15 @@ export default function Dashboard() {
     () => forms.reduce((sum, f) => sum + (f.questionCount || 0), 0),
     [forms]
   );
+
+  const todayCount = useMemo(() => {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    return forms.filter((f) => {
+      const t = f.createdAt?.toDate().getTime();
+      return typeof t === "number" && t >= start;
+    }).length;
+  }, [forms]);
 
   const firstName = (user?.displayName || user?.email || "there").split(/[\s@]/)[0];
 
@@ -201,14 +211,24 @@ export default function Dashboard() {
                   Plan
                 </div>
                 <div className="font-display text-base font-bold">
-                  {unlocked ? "Unlimited (unlocked)" : `Free · ${Math.min(forms.length, FREE_LIMIT)} / ${FREE_LIMIT} forms used`}
+                  {unlocked
+                    ? "Unlimited (unlocked)"
+                    : `Free · ${Math.min(todayCount, DAILY_LIMIT)} / ${DAILY_LIMIT} today · ${Math.min(forms.length, TOTAL_LIMIT)} / ${TOTAL_LIMIT} this month`}
                 </div>
                 {!unlocked && (
-                  <div className="mt-1 h-1.5 w-48 max-w-full overflow-hidden rounded-full bg-cream dark:bg-white/10">
-                    <div
-                      className="h-full bg-brand transition-all"
-                      style={{ width: `${Math.min(100, (forms.length / FREE_LIMIT) * 100)}%` }}
-                    />
+                  <div className="mt-2 flex gap-2">
+                    <div className="h-1.5 w-24 max-w-full overflow-hidden rounded-full bg-cream dark:bg-white/10">
+                      <div
+                        className="h-full bg-brand transition-all"
+                        style={{ width: `${Math.min(100, (todayCount / DAILY_LIMIT) * 100)}%` }}
+                      />
+                    </div>
+                    <div className="h-1.5 w-32 max-w-full overflow-hidden rounded-full bg-cream dark:bg-white/10">
+                      <div
+                        className="h-full bg-brand/70 transition-all"
+                        style={{ width: `${Math.min(100, (forms.length / TOTAL_LIMIT) * 100)}%` }}
+                      />
+                    </div>
                   </div>
                 )}
               </div>
@@ -219,6 +239,7 @@ export default function Dashboard() {
               </button>
             )}
           </div>
+
 
 
           {/* Quick actions */}
@@ -285,7 +306,7 @@ export default function Dashboard() {
       <UnlockDialog
         open={showUnlock}
         used={forms.length}
-        limit={FREE_LIMIT}
+        limit={TOTAL_LIMIT}
         onClose={() => setShowUnlock(false)}
         onUnlocked={() => setShowUnlock(false)}
       />

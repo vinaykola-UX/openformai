@@ -99,17 +99,39 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: "Google account not connected. Visit /connect-google." });
     }
 
-    // Free-tier limit: 5 forms unless unlocked with passcode.
-    const FREE_LIMIT = 5;
+    // Free-tier limits: 5 forms/day, 80 forms/month total — unless unlocked with passcode.
+    const DAILY_LIMIT = 5;
+    const TOTAL_LIMIT = 80;
     if (!userData.unlocked) {
-      const countSnap = await db.collection("forms").where("uid", "==", uid).count().get();
-      const used = countSnap.data().count;
-      if (used >= FREE_LIMIT) {
+      const now = new Date();
+      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const totalSnap = await db.collection("forms").where("uid", "==", uid).count().get();
+      const totalUsed = totalSnap.data().count;
+      if (totalUsed >= TOTAL_LIMIT) {
         return res.status(403).json({
-          error: `You've reached the free limit of ${FREE_LIMIT} forms. Enter the unlock passcode to continue.`,
+          error: `You've reached the free limit of ${TOTAL_LIMIT} forms. Enter the unlock passcode to continue.`,
           code: "LIMIT_REACHED",
-          limit: FREE_LIMIT,
-          used,
+          scope: "total",
+          limit: TOTAL_LIMIT,
+          used: totalUsed,
+        });
+      }
+      const daySnap = await db
+        .collection("forms")
+        .where("uid", "==", uid)
+        .where("createdAt", ">=", startOfDay)
+        .count()
+        .get();
+      const dayUsed = daySnap.data().count;
+      if (dayUsed >= DAILY_LIMIT) {
+        return res.status(429).json({
+          error: `Daily limit reached (${DAILY_LIMIT} forms/day). Try again tomorrow or enter the unlock passcode.`,
+          code: "DAILY_LIMIT_REACHED",
+          scope: "daily",
+          limit: DAILY_LIMIT,
+          used: dayUsed,
+          totalUsed,
+          totalLimit: TOTAL_LIMIT,
         });
       }
     }
