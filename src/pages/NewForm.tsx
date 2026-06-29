@@ -25,6 +25,7 @@ export default function NewForm() {
   const [title, setTitle] = useState("Untitled quiz");
   const [text, setText] = useState("");
   const [driveUrl, setDriveUrl] = useState("");
+  const [sourceType, setSourceType] = useState<string>("text");
   const [importing, setImporting] = useState<"file" | "drive" | null>(null);
   const [importMsg, setImportMsg] = useState("");
   const [questions, setQuestions] = useState<ParsedQuestion[] | null>(null);
@@ -44,6 +45,8 @@ export default function NewForm() {
     setImporting("file");
     try {
       const extracted = await extractFileText(file);
+      const ext = file.name.split(".").pop()?.toLowerCase() ?? "text";
+      setSourceType(["jpg", "jpeg", "png", "webp", "gif"].includes(ext) ? "image" : ext);
       setText((prev) => (prev ? prev + "\n\n" + extracted : extracted));
       setImportMsg(`Imported ${file.name} (${extracted.length.toLocaleString()} chars)`);
     } catch (err: any) {
@@ -60,6 +63,7 @@ export default function NewForm() {
     setImporting("drive");
     try {
       const extracted = await extractDriveUrl(driveUrl.trim());
+      setSourceType("pdf");
       setText((prev) => (prev ? prev + "\n\n" + extracted : extracted));
       setImportMsg(`Imported from Drive (${extracted.length.toLocaleString()} chars)`);
       setDriveUrl("");
@@ -74,11 +78,15 @@ export default function NewForm() {
     setError("");
     setLoading(true);
     try {
-      const { questions: qs, meta: m } = await generateQuestions(text);
+      const { questions: qs, meta: m } = await generateQuestions(text, sourceType);
       setQuestions(qs);
       setMeta(m);
     } catch (err: any) {
-      setError(err.message);
+      if (err.message?.includes("429") || err.message?.includes("quota")) {
+        setError("AI quota exceeded. Tip: paste text directly — that never uses AI.");
+      } else {
+        setError(err.message);
+      }
     } finally {
       setLoading(false);
     }
@@ -222,13 +230,16 @@ export default function NewForm() {
               <textarea
                 rows={12}
                 value={text}
-                onChange={(e) => setText(e.target.value)}
+                onChange={(e) => {
+                  setText(e.target.value);
+                  setSourceType("text");
+                }}
                 placeholder={EXAMPLE}
                 className="input font-mono text-xs leading-relaxed"
               />
               <button
                 type="button"
-                onClick={() => setText(EXAMPLE)}
+                onClick={() => { setText(EXAMPLE); setSourceType("text"); }}
                 className="mt-2 text-xs font-semibold text-brand hover:underline"
               >
                 Use example
@@ -238,7 +249,8 @@ export default function NewForm() {
             <button onClick={generate} disabled={!text.trim() || loading} className="btn-primary">
               {loading ? (
                 <>
-                  <Sparkles className="h-4 w-4 animate-pulse" /> Parsing with AI...
+                  <Sparkles className="h-4 w-4 animate-pulse" />
+                  {sourceType === "image" || sourceType === "scanned_pdf" ? "Parsing with AI..." : "Parsing..."}
                 </>
               ) : (
                 <>
