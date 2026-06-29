@@ -55,17 +55,18 @@ export default function UnlockDialog({
           <Lock className="h-5 w-5" />
         </div>
         <h2 className="font-display text-xl font-bold">
-          {scope === "daily" ? "Daily limit reached" : "Unlock unlimited forms"}
+          {scope === "daily"
+            ? "Daily limit reached"
+            : scope === "total"
+            ? "Monthly limit reached"
+            : "Unlock unlimited forms"}
         </h2>
         <p className="mt-1 text-sm text-ink/70 dark:text-[#F5EDE7]/70">
-          {message
-            ? message
-            : scope === "daily"
+          {scope === "daily"
             ? `You've used your ${limit ?? 5} forms for today. Come back tomorrow or enter the passcode to keep going.`
-            : typeof used === "number" && typeof limit === "number"
-            ? `You've used ${used} of ${limit} free forms this month.`
-            : "Free accounts can create up to 5 forms per day and 80 per month."}{" "}
-          Enter the unlock passcode to keep going.
+            : scope === "total"
+            ? "You've reached the monthly limit. Upgrade by entering the passcode to keep creating forms."
+            : "Enter the unlock passcode to keep going."}
         </p>
 
         <div className="mt-4 rounded-2xl border border-brand/15 bg-cream/70 p-3 text-xs text-ink/70 dark:border-white/10 dark:bg-white/5 dark:text-[#F5EDE7]/70">
