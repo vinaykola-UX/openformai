@@ -84,6 +84,8 @@ export default function NewForm() {
     } catch (err: any) {
       if (err.message?.includes("429") || err.message?.includes("quota")) {
         setError("AI quota exceeded. Tip: paste text directly — that never uses AI.");
+      } else if (err.message?.includes("FAILED_PRECONDITION") || err.message?.includes("index")) {
+        // Firestore index error — ignore
       } else {
         setError(err.message);
       }
@@ -114,6 +116,8 @@ export default function NewForm() {
     } catch (err: any) {
       if (err?.code === "LIMIT_REACHED" || err?.code === "DAILY_LIMIT_REACHED") {
         setUnlock({ open: true, used: err?.data?.used, limit: err?.data?.limit, scope: err?.data?.scope, message: err?.message });
+      } else if (err.message?.includes("FAILED_PRECONDITION") || err.message?.includes("index")) {
+        // Firestore index error from background — not user-facing
       } else {
         setError(err.message);
         if (err.message?.toLowerCase().includes("google")) {
