@@ -33,7 +33,7 @@ export default function NewForm() {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<{ responderUri: string; editUri: string } | null>(null);
-  const [unlock, setUnlock] = useState<{ open: boolean; used?: number; limit?: number }>({ open: false });
+  const [unlock, setUnlock] = useState<{ open: boolean; used?: number; limit?: number; scope?: string; message?: string }>({ open: false });
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
