@@ -306,7 +306,7 @@ export default function Dashboard() {
       <UnlockDialog
         open={showUnlock}
         used={forms.length}
-        limit={FREE_LIMIT}
+        limit={TOTAL_LIMIT}
         onClose={() => setShowUnlock(false)}
         onUnlocked={() => setShowUnlock(false)}
       />
