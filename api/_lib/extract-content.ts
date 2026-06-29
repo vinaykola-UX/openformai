@@ -12,13 +12,38 @@ export async function extractContent(
   const mt = (mimeType || "").toLowerCase();
 
   if (mt.includes("pdf") || name.endsWith(".pdf")) {
-    // unpdf wraps pdfjs's serverless build — no DOMMatrix/Canvas deps,
-    // safe for Vercel's Node.js runtime.
     const uint8 = new Uint8Array(buf);
     const pdf = await getDocumentProxy(uint8);
     const { text } = await extractText(pdf, { mergePages: true });
     const raw = typeof text === "string" ? text : (text as string[]).join("\n");
-    return raw.replace(/\r\n/g, "\n").trim();
+    const cleaned = raw.replace(/\r\n/g, "\n").trim();
+
+    // If text is too short, it's likely a scanned PDF — fall back to Gemini OCR
+    if (cleaned.length >= 50) return cleaned;
+
+    console.log("[extract] scanned PDF detected, falling back to Gemini OCR");
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) throw new Error("GEMINI_API_KEY not configured — cannot OCR scanned PDF");
+
+    const ai = new GoogleGenAI({ apiKey });
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: [
+        {
+          role: "user",
+          parts: [
+            {
+              text:
+                "Extract every exam question and any answer key visible in this scanned PDF. " +
+                "Preserve question numbers, option letters, and the literal text. " +
+                "Return plain text only — no commentary.",
+            },
+            { inlineData: { mimeType: "application/pdf", data: buf.toString("base64") } },
+          ],
+        },
+      ],
+    });
+    return (response.text || "").trim();
   }
 
   if (
