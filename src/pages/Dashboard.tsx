@@ -131,6 +131,15 @@ export default function Dashboard() {
     [forms]
   );
 
+  const todayCount = useMemo(() => {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    return forms.filter((f) => {
+      const t = f.createdAt?.toDate().getTime();
+      return typeof t === "number" && t >= start;
+    }).length;
+  }, [forms]);
+
   const firstName = (user?.displayName || user?.email || "there").split(/[\s@]/)[0];
 
   return (
