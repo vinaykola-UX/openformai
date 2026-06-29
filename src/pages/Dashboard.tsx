@@ -202,14 +202,24 @@ export default function Dashboard() {
                   Plan
                 </div>
                 <div className="font-display text-base font-bold">
-                  {unlocked ? "Unlimited (unlocked)" : `Free · ${Math.min(forms.length, FREE_LIMIT)} / ${FREE_LIMIT} forms used`}
+                  {unlocked
+                    ? "Unlimited (unlocked)"
+                    : `Free · ${Math.min(todayCount, DAILY_LIMIT)} / ${DAILY_LIMIT} today · ${Math.min(forms.length, TOTAL_LIMIT)} / ${TOTAL_LIMIT} this month`}
                 </div>
                 {!unlocked && (
-                  <div className="mt-1 h-1.5 w-48 max-w-full overflow-hidden rounded-full bg-cream dark:bg-white/10">
-                    <div
-                      className="h-full bg-brand transition-all"
-                      style={{ width: `${Math.min(100, (forms.length / FREE_LIMIT) * 100)}%` }}
-                    />
+                  <div className="mt-2 flex gap-2">
+                    <div className="h-1.5 w-24 max-w-full overflow-hidden rounded-full bg-cream dark:bg-white/10">
+                      <div
+                        className="h-full bg-brand transition-all"
+                        style={{ width: `${Math.min(100, (todayCount / DAILY_LIMIT) * 100)}%` }}
+                      />
+                    </div>
+                    <div className="h-1.5 w-32 max-w-full overflow-hidden rounded-full bg-cream dark:bg-white/10">
+                      <div
+                        className="h-full bg-brand/70 transition-all"
+                        style={{ width: `${Math.min(100, (forms.length / TOTAL_LIMIT) * 100)}%` }}
+                      />
+                    </div>
                   </div>
                 )}
               </div>
@@ -220,6 +230,7 @@ export default function Dashboard() {
               </button>
             )}
           </div>
+
 
 
           {/* Quick actions */}
