@@ -6,12 +6,16 @@ export default function UnlockDialog({
   open,
   used,
   limit,
+  scope,
+  message,
   onClose,
   onUnlocked,
 }: {
   open: boolean;
   used?: number;
   limit?: number;
+  scope?: string;
+  message?: string;
   onClose: () => void;
   onUnlocked: () => void;
 }) {
