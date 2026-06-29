@@ -285,6 +285,8 @@ export default function NewForm() {
         open={unlock.open}
         used={unlock.used}
         limit={unlock.limit}
+        scope={unlock.scope}
+        message={unlock.message}
         onClose={() => setUnlock({ open: false })}
         onUnlocked={() => {
           setUnlock({ open: false });
