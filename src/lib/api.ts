@@ -78,12 +78,13 @@ export type GenerateMeta = {
 };
 
 export async function generateQuestions(
-  text: string
+  text: string,
+  sourceType: string = "text"
 ): Promise<{ questions: ParsedQuestion[]; meta: GenerateMeta }> {
   const data = await call<{ questions: ParsedQuestion[]; meta?: GenerateMeta }>("/api/generate", {
     method: "POST",
     headers: await authHeaders(),
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ text, sourceType }),
   });
   return {
     questions: data.questions || [],
@@ -114,7 +115,6 @@ export async function exchangeGoogleCode(code: string) {
 
 export async function extractFileText(file: File): Promise<string> {
   const buf = await file.arrayBuffer();
-  // Chunked base64 to avoid call-stack overflow on large files
   const bytes = new Uint8Array(buf);
   let binary = "";
   const CHUNK = 0x8000;
