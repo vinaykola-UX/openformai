@@ -4,7 +4,6 @@ import {
   collection,
   doc,
   onSnapshot,
-  orderBy,
   query,
   where,
   Timestamp,
@@ -73,7 +72,6 @@ export default function Dashboard() {
     return () => unsub();
   }, [user]);
 
-
   useEffect(() => {
     if (!user) return;
     setLoading(true);
@@ -83,6 +81,7 @@ export default function Dashboard() {
         id: d.id,
         ...(d.data() as Omit<FormDoc, "id">),
       }));
+      // Sort client-side — no composite index needed
       list.sort((a, b) => {
         const at = a.createdAt?.toMillis?.() ?? 0;
         const bt = b.createdAt?.toMillis?.() ?? 0;
@@ -91,32 +90,21 @@ export default function Dashboard() {
       return list;
     };
 
+    // Only use simple where query — no orderBy — avoids composite index requirement
     const baseQ = query(collection(db, "forms"), where("uid", "==", user.uid));
-    const orderedQ = query(baseQ, orderBy("createdAt", "desc"));
 
     const unsub = onSnapshot(
-      orderedQ,
+      baseQ,
       (snap) => {
         setForms(mapDocs(snap));
         setLoading(false);
       },
       (err) => {
-        console.warn("[dashboard] ordered query failed, falling back", err);
-        // Composite index missing — fall back to unordered query, sort client-side.
-        const unsub2 = onSnapshot(
-          baseQ,
-          (snap) => {
-            setForms(mapDocs(snap));
-            setLoading(false);
-          },
-          (err2) => {
-            console.error("[dashboard] forms snapshot failed", err2);
-            setLoading(false);
-          }
-        );
-        return unsub2;
+        console.error("[dashboard] forms snapshot failed", err);
+        setLoading(false);
       }
     );
+
     return () => unsub();
   }, [user]);
 
@@ -148,7 +136,6 @@ export default function Dashboard() {
 
       <main className="flex-1 px-4 py-8 sm:py-12">
         <div className="mx-auto w-full max-w-6xl">
-          {/* Hero / header */}
           <div className="relative overflow-hidden rounded-3xl bg-brand-gradient p-6 text-white shadow-card sm:p-10">
             <div className="absolute -right-16 -top-16 h-64 w-64 rounded-full bg-peach/30 blur-3xl" />
             <div className="absolute -bottom-20 -left-10 h-56 w-56 rounded-full bg-white/10 blur-3xl" />
@@ -181,7 +168,6 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Stats */}
           <div className="mt-6 grid gap-4 sm:grid-cols-3">
             <StatCard
               icon={<FileText className="h-5 w-5" />}
@@ -200,7 +186,6 @@ export default function Dashboard() {
             />
           </div>
 
-          {/* Usage / plan */}
           <div className="card mt-4 flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3">
               <div className="grid h-11 w-11 place-items-center rounded-2xl bg-peach/40 text-brand">
@@ -234,9 +219,6 @@ export default function Dashboard() {
             )}
           </div>
 
-
-
-          {/* Quick actions */}
           <div className="mt-8 grid gap-4 lg:grid-cols-3">
             <QuickAction
               to="/dashboard/new"
@@ -258,7 +240,6 @@ export default function Dashboard() {
             />
           </div>
 
-          {/* Forms list */}
           <div className="mt-10">
             <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
@@ -308,49 +289,22 @@ export default function Dashboard() {
   );
 }
 
-function StatCard({
-  icon,
-  label,
-  value,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-}) {
+function StatCard({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
     <div className="card flex items-center gap-4 p-5">
-      <div className="grid h-11 w-11 place-items-center rounded-2xl bg-peach/40 text-brand">
-        {icon}
-      </div>
+      <div className="grid h-11 w-11 place-items-center rounded-2xl bg-peach/40 text-brand">{icon}</div>
       <div>
-        <div className="text-xs font-semibold uppercase tracking-wide text-ink/60 dark:text-[#F5EDE7]/60">
-          {label}
-        </div>
+        <div className="text-xs font-semibold uppercase tracking-wide text-ink/60 dark:text-[#F5EDE7]/60">{label}</div>
         <div className="font-display text-xl font-bold">{value}</div>
       </div>
     </div>
   );
 }
 
-function QuickAction({
-  to,
-  title,
-  description,
-  icon,
-}: {
-  to: string;
-  title: string;
-  description: string;
-  icon: React.ReactNode;
-}) {
+function QuickAction({ to, title, description, icon }: { to: string; title: string; description: string; icon: React.ReactNode }) {
   return (
-    <Link
-      to={to}
-      className="card group flex items-start gap-4 p-5 transition hover:-translate-y-0.5 hover:shadow-glow"
-    >
-      <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-brand text-white">
-        {icon}
-      </div>
+    <Link to={to} className="card group flex items-start gap-4 p-5 transition hover:-translate-y-0.5 hover:shadow-glow">
+      <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-brand text-white">{icon}</div>
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between">
           <h3 className="font-display font-bold">{title}</h3>
@@ -369,12 +323,8 @@ function FormCard({ form }: { form: FormDoc }) {
         <div className="min-w-0">
           <h3 className="truncate font-display text-base font-bold">{form.title}</h3>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink/60 dark:text-[#F5EDE7]/60">
-            <span className="chip">
-              <ListChecks className="h-3 w-3" /> {form.questionCount} questions
-            </span>
-            <span className="inline-flex items-center gap-1">
-              <Clock className="h-3 w-3" /> {formatDate(form.createdAt)}
-            </span>
+            <span className="chip"><ListChecks className="h-3 w-3" /> {form.questionCount} questions</span>
+            <span className="inline-flex items-center gap-1"><Clock className="h-3 w-3" /> {formatDate(form.createdAt)}</span>
           </div>
         </div>
         <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-peach/40 text-brand">
@@ -382,20 +332,10 @@ function FormCard({ form }: { form: FormDoc }) {
         </div>
       </div>
       <div className="flex flex-wrap gap-2">
-        <a
-          href={form.responderUri}
-          target="_blank"
-          rel="noreferrer"
-          className="btn-primary !py-2 !px-3 text-xs"
-        >
+        <a href={form.responderUri} target="_blank" rel="noreferrer" className="btn-primary !py-2 !px-3 text-xs">
           <ExternalLink className="h-3.5 w-3.5" /> Open
         </a>
-        <a
-          href={form.editUri}
-          target="_blank"
-          rel="noreferrer"
-          className="btn-secondary !py-2 !px-3 text-xs"
-        >
+        <a href={form.editUri} target="_blank" rel="noreferrer" className="btn-secondary !py-2 !px-3 text-xs">
           <Pencil className="h-3.5 w-3.5" /> Edit
         </a>
         <CopyLinkButton url={form.responderUri} size="sm" label="Copy link" />
@@ -410,13 +350,9 @@ function EmptyState({ hasAny }: { hasAny: boolean }) {
       <div className="grid h-14 w-14 place-items-center rounded-2xl bg-peach/40 text-brand">
         <Sparkles className="h-7 w-7" />
       </div>
-      <h3 className="font-display text-lg font-bold">
-        {hasAny ? "No matches" : "No forms yet"}
-      </h3>
+      <h3 className="font-display text-lg font-bold">{hasAny ? "No matches" : "No forms yet"}</h3>
       <p className="max-w-sm text-sm text-ink/60 dark:text-[#F5EDE7]/60">
-        {hasAny
-          ? "Try a different search term."
-          : "Create your first Google Form from pasted text, an uploaded file, or a Drive link."}
+        {hasAny ? "Try a different search term." : "Create your first Google Form from pasted text, an uploaded file, or a Drive link."}
       </p>
       {!hasAny && (
         <Link to="/dashboard/new" className="btn-primary mt-2">
