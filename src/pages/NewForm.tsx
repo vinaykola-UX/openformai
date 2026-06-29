@@ -104,8 +104,8 @@ export default function NewForm() {
       const r = await createForm(title, questions);
       setResult(r);
     } catch (err: any) {
-      if (err?.code === "LIMIT_REACHED") {
-        setUnlock({ open: true, used: err?.data?.used, limit: err?.data?.limit });
+      if (err?.code === "LIMIT_REACHED" || err?.code === "DAILY_LIMIT_REACHED") {
+        setUnlock({ open: true, used: err?.data?.used, limit: err?.data?.limit, scope: err?.data?.scope, message: err?.message });
       } else {
         setError(err.message);
         if (err.message?.toLowerCase().includes("google")) {
