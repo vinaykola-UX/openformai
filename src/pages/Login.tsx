@@ -1,42 +1,30 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import Navbar from "../components/Navbar";
-import { Sparkles } from "lucide-react";
+import GoogleIcon from "../components/GoogleIcon";
+import { Sparkles, Loader2 } from "lucide-react";
 
 export default function Login() {
-  const { user, loading, signIn, signInGoogle } = useAuth();
+  const { user, loading, signInGoogle } = useAuth();
   const nav = useNavigate();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const [loading_, setLoading] = useState(false);
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (!loading && user) nav("/dashboard", { replace: true });
   }, [user, loading, nav]);
 
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setError("");
-    setLoading(true);
-    try {
-      await signIn(email, password);
-      nav("/dashboard");
-    } catch (err: any) {
-      setError(err.message || "Sign-in failed");
-    } finally {
-      setLoading(false);
-    }
-  }
-
   async function google() {
     setError("");
+    setBusy(true);
     try {
       await signInGoogle();
       nav("/dashboard");
     } catch (err: any) {
       setError(err.message || "Google sign-in failed");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -49,30 +37,31 @@ export default function Login() {
             <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-brand text-white">
               <Sparkles className="h-6 w-6" />
             </div>
-            <h1 className="font-display text-2xl font-bold">Welcome back</h1>
-            <p className="mt-1 text-sm text-ink/60 dark:text-[#F5EDE7]/60">Sign in to your OpenForm account</p>
+            <h1 className="font-display text-2xl font-bold">Welcome to OpenForm</h1>
+            <p className="mt-1 text-sm text-ink/60 dark:text-[#F5EDE7]/60">
+              Sign in with Google to create and manage your forms.
+            </p>
           </div>
-          <form onSubmit={onSubmit} className="space-y-4">
-            <div>
-              <label className="label">Email</label>
-              <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="input" />
-            </div>
-            <div>
-              <label className="label">Password</label>
-              <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} className="input" />
-            </div>
-            {error && <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-300">{error}</p>}
-            <button type="submit" className="btn-primary w-full" disabled={loading_}>
-              {loading_ ? "Signing in..." : "Sign in"}
-            </button>
-          </form>
-          <div className="my-5 flex items-center gap-3 text-xs text-ink/40">
-            <div className="h-px flex-1 bg-brand/10" /> OR <div className="h-px flex-1 bg-brand/10" />
-          </div>
-          <button onClick={google} className="btn-secondary w-full">Continue with Google</button>
-          <p className="mt-6 text-center text-sm text-ink/60 dark:text-[#F5EDE7]/60">
-            New here?{" "}
-            <Link to="/signup" className="font-semibold text-brand hover:underline">Create an account</Link>
+
+          {error && (
+            <p className="mb-4 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-300">
+              {error}
+            </p>
+          )}
+
+          <button
+            onClick={google}
+            disabled={busy}
+            className="flex w-full items-center justify-center gap-3 rounded-2xl border border-brand/15 bg-white px-4 py-3 text-sm font-semibold text-ink shadow-sm transition hover:bg-cream disabled:opacity-60 dark:border-white/10 dark:bg-white/10 dark:text-[#F5EDE7] dark:hover:bg-white/15"
+          >
+            {busy ? <Loader2 className="h-5 w-5 animate-spin" /> : <GoogleIcon />}
+            {busy ? "Signing in…" : "Continue with Google"}
+          </button>
+
+          <p className="mt-6 text-center text-xs text-ink/50 dark:text-[#F5EDE7]/50">
+            By continuing you agree to our{" "}
+            <a href="/terms" className="font-semibold text-brand hover:underline">Terms</a> and{" "}
+            <a href="/privacy" className="font-semibold text-brand hover:underline">Privacy Policy</a>.
           </p>
         </div>
       </main>
