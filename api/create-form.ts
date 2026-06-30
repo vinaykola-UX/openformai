@@ -5,81 +5,248 @@ import { verifyAuth } from "./_lib/verify-auth.js";
 import { oauthClient } from "./_lib/google-oauth.js";
 import { getAdmin } from "./_lib/firebase-admin.js";
 
+type QuestionType =
+  | "SHORT"
+  | "PARAGRAPH"
+  | "MCQ"
+  | "CHECKBOX"
+  | "DROPDOWN"
+  | "LINEAR_SCALE"
+  | "DATE"
+  | "TIME"
+  | "GRID_MULTIPLE_CHOICE"
+  | "GRID_CHECKBOX"
+  | "FILE_UPLOAD";
+
 type Question = {
-  type: "MCQ" | "CHECKBOX" | "SHORT" | "PARAGRAPH" | "TRUE_FALSE";
+  type: QuestionType;
   title: string;
+  description?: string;
   options?: string[];
-  correctAnswer?: string | string[];
-  points?: number;
+  rows?: string[];
   required?: boolean;
+  scaleMin?: number;
+  scaleMax?: number;
+  scaleMinLabel?: string;
+  scaleMaxLabel?: string;
+  includeYear?: boolean;
+  includeTime?: boolean;
+  is24Hour?: boolean;
 };
 
 function buildItem(q: Question, index: number) {
   const required = q.required ?? true;
-  const points = q.points ?? 1;
   const base: any = { title: q.title };
+  if (q.description) base.description = q.description;
 
-  if (q.type === "MCQ" || q.type === "CHECKBOX") {
-    const opts = (q.options || []).map((value) => ({ value }));
-    const question: any = {
-      required,
-      choiceQuestion: {
-        type: q.type === "MCQ" ? "RADIO" : "CHECKBOX",
-        options: opts,
-        shuffle: false,
-      },
-    };
-    const correct = Array.isArray(q.correctAnswer) ? q.correctAnswer : q.correctAnswer ? [q.correctAnswer] : [];
-    if (correct.length) {
-      question.grading = {
-        pointValue: points,
-        correctAnswers: { answers: correct.map((value) => ({ value })) },
+  switch (q.type) {
+    case "MCQ":
+      return {
+        createItem: {
+          item: {
+            ...base,
+            questionItem: {
+              question: {
+                required,
+                choiceQuestion: {
+                  type: "RADIO",
+                  options: (q.options || []).map((value) => ({ value })),
+                  shuffle: false,
+                },
+              },
+            },
+          },
+          location: { index },
+        },
       };
-    }
-    return {
-      createItem: {
-        item: { ...base, questionItem: { question } },
-        location: { index },
-      },
-    };
-  }
 
-  if (q.type === "TRUE_FALSE") {
-    const question: any = {
-      required,
-      choiceQuestion: { type: "RADIO", options: [{ value: "True" }, { value: "False" }] },
-    };
-    if (q.correctAnswer) {
-      question.grading = {
-        pointValue: points,
-        correctAnswers: { answers: [{ value: String(q.correctAnswer) }] },
+    case "CHECKBOX":
+      return {
+        createItem: {
+          item: {
+            ...base,
+            questionItem: {
+              question: {
+                required,
+                choiceQuestion: {
+                  type: "CHECKBOX",
+                  options: (q.options || []).map((value) => ({ value })),
+                  shuffle: false,
+                },
+              },
+            },
+          },
+          location: { index },
+        },
       };
-    }
-    return {
-      createItem: {
-        item: { ...base, questionItem: { question } },
-        location: { index },
-      },
-    };
-  }
 
-  // SHORT / PARAGRAPH
-  const question: any = {
-    required,
-    textQuestion: { paragraph: q.type === "PARAGRAPH" },
-  };
-  if (q.correctAnswer && typeof q.correctAnswer === "string") {
-    question.grading = {
-      pointValue: points,
-      correctAnswers: { answers: [{ value: q.correctAnswer }] },
-    };
+    case "DROPDOWN":
+      return {
+        createItem: {
+          item: {
+            ...base,
+            questionItem: {
+              question: {
+                required,
+                choiceQuestion: {
+                  type: "DROP_DOWN",
+                  options: (q.options || []).map((value) => ({ value })),
+                },
+              },
+            },
+          },
+          location: { index },
+        },
+      };
+
+    case "LINEAR_SCALE":
+      return {
+        createItem: {
+          item: {
+            ...base,
+            questionItem: {
+              question: {
+                required,
+                scaleQuestion: {
+                  low: q.scaleMin ?? 1,
+                  high: q.scaleMax ?? 5,
+                  lowLabel: q.scaleMinLabel || undefined,
+                  highLabel: q.scaleMaxLabel || undefined,
+                },
+              },
+            },
+          },
+          location: { index },
+        },
+      };
+
+    case "DATE":
+      return {
+        createItem: {
+          item: {
+            ...base,
+            questionItem: {
+              question: {
+                required,
+                dateQuestion: {
+                  includeYear: q.includeYear ?? true,
+                  includeTime: q.includeTime ?? false,
+                },
+              },
+            },
+          },
+          location: { index },
+        },
+      };
+
+    case "TIME":
+      return {
+        createItem: {
+          item: {
+            ...base,
+            questionItem: {
+              question: {
+                required,
+                timeQuestion: { duration: false },
+              },
+            },
+          },
+          location: { index },
+        },
+      };
+
+    case "GRID_MULTIPLE_CHOICE":
+      return {
+        createItem: {
+          item: {
+            ...base,
+            questionGroupItem: {
+              questions: (q.rows || []).map((row) => ({
+                rowQuestion: { title: row },
+                required,
+              })),
+              grid: {
+                columns: {
+                  type: "RADIO",
+                  options: (q.options || []).map((value) => ({ value })),
+                },
+              },
+            },
+          },
+          location: { index },
+        },
+      };
+
+    case "GRID_CHECKBOX":
+      return {
+        createItem: {
+          item: {
+            ...base,
+            questionGroupItem: {
+              questions: (q.rows || []).map((row) => ({
+                rowQuestion: { title: row },
+                required,
+              })),
+              grid: {
+                columns: {
+                  type: "CHECKBOX",
+                  options: (q.options || []).map((value) => ({ value })),
+                },
+              },
+            },
+          },
+          location: { index },
+        },
+      };
+
+    case "FILE_UPLOAD":
+      // Google Forms API cannot create file-upload questions (platform limitation).
+      // Fallback: short-answer field asking for a link, with a clear note.
+      return {
+        createItem: {
+          item: {
+            title: q.title,
+            description:
+              (q.description ? q.description + " " : "") +
+              "(File upload isn't supported via API — please paste a shareable link, or edit this question in Google Forms to enable native file upload.)",
+            questionItem: {
+              question: {
+                required,
+                textQuestion: { paragraph: false },
+              },
+            },
+          },
+          location: { index },
+        },
+      };
+
+    case "PARAGRAPH":
+      return {
+        createItem: {
+          item: {
+            ...base,
+            questionItem: {
+              question: { required, textQuestion: { paragraph: true } },
+            },
+          },
+          location: { index },
+        },
+      };
+
+    case "SHORT":
+    default:
+      return {
+        createItem: {
+          item: {
+            ...base,
+            questionItem: {
+              question: { required, textQuestion: { paragraph: false } },
+            },
+          },
+          location: { index },
+        },
+      };
   }
-  return {
-    createItem: {
-      item: { ...base, questionItem: { question } },
-      location: { index },
-    },
-  };
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -144,18 +311,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const created = await forms.forms.create({ requestBody: { info: { title } } });
     const formId = created.data.formId!;
 
-    // 2. Convert to quiz + add questions
-    const hasGrading = questions.some((q) => q.correctAnswer);
-    const requests: any[] = [];
-    if (hasGrading) {
-      requests.push({
-        updateSettings: {
-          settings: { quizSettings: { isQuiz: true } },
-          updateMask: "quizSettings.isQuiz",
-        },
-      });
-    }
-    questions.forEach((q, i) => requests.push(buildItem(q, i)));
+    // 2. Add questions — no quiz mode, no grading, ever.
+    const requests: any[] = questions.map((q, i) => buildItem(q, i));
 
     await forms.forms.batchUpdate({ formId, requestBody: { requests } });
 
