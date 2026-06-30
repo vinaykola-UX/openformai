@@ -60,12 +60,29 @@ export async function unlockAccount(passcode: string) {
 }
 
 export type ParsedQuestion = {
-  type: "MCQ" | "CHECKBOX" | "SHORT" | "PARAGRAPH" | "TRUE_FALSE";
+  type:
+    | "SHORT"
+    | "PARAGRAPH"
+    | "MCQ"
+    | "CHECKBOX"
+    | "DROPDOWN"
+    | "LINEAR_SCALE"
+    | "DATE"
+    | "TIME"
+    | "GRID_MULTIPLE_CHOICE"
+    | "GRID_CHECKBOX"
+    | "FILE_UPLOAD";
   title: string;
+  description?: string;
   options?: string[];
-  correctAnswer?: string | string[];
-  points?: number;
+  rows?: string[];
   required?: boolean;
+  scaleMin?: number;
+  scaleMax?: number;
+  scaleMinLabel?: string;
+  scaleMaxLabel?: string;
+  includeYear?: boolean;
+  includeTime?: boolean;
   suggestedTitle?: string;
   clarityNote?: string;
   estimatedSeconds?: number;
@@ -73,7 +90,6 @@ export type ParsedQuestion = {
 
 export type GenerateMeta = {
   estimatedMinutes: number;
-  estimatedSeconds: number;
   warnings: { index: number; type: string; message: string }[];
 };
 
@@ -88,7 +104,7 @@ export async function generateQuestions(
   });
   return {
     questions: data.questions || [],
-    meta: data.meta || { estimatedMinutes: 0, estimatedSeconds: 0, warnings: [] },
+    meta: data.meta || { estimatedMinutes: 0, warnings: [] },
   };
 }
 
