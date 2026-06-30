@@ -3,27 +3,28 @@ import { Link, useNavigate } from "react-router-dom";
 import { ArrowLeft, Sparkles, Wand2, CheckCircle2, ExternalLink, Upload, Link2, Loader2 } from "lucide-react";
 import Navbar from "../components/Navbar";
 import { generateQuestions, createForm, extractFileText, extractDriveUrl, type ParsedQuestion } from "../lib/api";
-import QuestionPreview from "../components/QuestionPreview";
 import QuestionEditor from "../components/QuestionEditor";
 import CopyLinkButton from "../components/CopyLinkButton";
 import UnlockDialog from "../components/UnlockDialog";
 
-const EXAMPLE = `1. What is the capital of France?
-a) London
-b) Paris
-c) Madrid
-d) Rome
-Answer: b
+const EXAMPLE = `1. What is your full name?
 
-2. The Earth is flat. (True/False)
-Answer: False
+2. What is your email address?
 
-3. Explain photosynthesis in your own words.`;
+3. How satisfied are you with our service?
+
+4. Select your favorite color.
+a) Red
+b) Blue
+c) Green
+d) Yellow
+
+5. Tell us about your experience.`;
 
 export default function NewForm() {
   const nav = useNavigate();
   const fileRef = useRef<HTMLInputElement>(null);
-  const [title, setTitle] = useState("Untitled quiz");
+  const [title, setTitle] = useState("Untitled form");
   const [text, setText] = useState("");
   const [driveUrl, setDriveUrl] = useState("");
   const [sourceType, setSourceType] = useState<string>("text");
@@ -35,7 +36,6 @@ export default function NewForm() {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<{ responderUri: string; editUri: string } | null>(null);
-  const [editMode, setEditMode] = useState(false);
   const [unlock, setUnlock] = useState<{ open: boolean; used?: number; limit?: number; scope?: string; message?: string }>({ open: false });
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -79,7 +79,6 @@ export default function NewForm() {
   async function generate() {
     setError("");
     setLoading(true);
-    setEditMode(false);
     try {
       const { questions: qs, meta: m } = await generateQuestions(text, sourceType);
       setQuestions(qs);
@@ -95,18 +94,6 @@ export default function NewForm() {
     } finally {
       setLoading(false);
     }
-  }
-
-  function applySuggestion(i: number) {
-    setQuestions((prev) => {
-      if (!prev) return prev;
-      const next = [...prev];
-      const q = next[i];
-      if (q.suggestedTitle) {
-        next[i] = { ...q, title: q.suggestedTitle, suggestedTitle: undefined, clarityNote: undefined };
-      }
-      return next;
-    });
   }
 
   async function publish() {
@@ -140,7 +127,7 @@ export default function NewForm() {
               <CheckCircle2 className="h-7 w-7" />
             </div>
             <h1 className="font-display text-2xl font-bold">Your form is live!</h1>
-            <p className="mt-2 text-ink/70 dark:text-[#F5EDE7]/70">Share the responder link with your students.</p>
+            <p className="mt-2 text-ink/70 dark:text-[#F5EDE7]/70">Share the responder link with your respondents.</p>
             <div className="mt-5 flex items-center gap-2 rounded-2xl border border-brand/15 bg-cream/70 px-3 py-2 text-left dark:border-white/10 dark:bg-white/5">
               <input
                 readOnly
@@ -270,27 +257,16 @@ export default function NewForm() {
           <div className="mt-8">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h2 className="font-display text-xl font-bold">
-                  {editMode ? "Editor" : "Preview"} · {questions.length} questions
-                </h2>
+                <h2 className="font-display text-xl font-bold">Editor · {questions.length} questions</h2>
                 {meta && meta.estimatedMinutes > 0 && (
                   <p className="mt-1 text-xs text-ink/60 dark:text-[#F5EDE7]/60">
                     Estimated time to complete: <span className="font-semibold text-brand">~{meta.estimatedMinutes} min</span>
                   </p>
                 )}
               </div>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => setEditMode(!editMode)}
-                  className="btn-secondary"
-                >
-                  {editMode ? "Preview" : "✏ Edit questions"}
-                </button>
-                <button onClick={publish} disabled={creating} className="btn-primary">
-                  {creating ? "Creating Google Form..." : "Create Google Form"}
-                </button>
-              </div>
+              <button onClick={publish} disabled={creating} className="btn-primary">
+                {creating ? "Creating Google Form..." : "Create Google Form"}
+              </button>
             </div>
             {meta && meta.warnings.length > 0 && (
               <div className="mb-4 space-y-2">
@@ -301,18 +277,10 @@ export default function NewForm() {
                 ))}
               </div>
             )}
-            {editMode ? (
-              <QuestionEditor
-                questions={questions}
-                onChange={setQuestions}
-              />
-            ) : (
-              <div className="space-y-3">
-                {questions.map((q, i) => (
-                  <QuestionPreview key={i} q={q} index={i} onApplySuggestion={() => applySuggestion(i)} />
-                ))}
-              </div>
-            )}
+            <QuestionEditor
+              questions={questions}
+              onChange={setQuestions}
+            />
           </div>
         )}
       </main>
