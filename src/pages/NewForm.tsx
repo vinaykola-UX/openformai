@@ -4,6 +4,7 @@ import { ArrowLeft, Sparkles, Wand2, CheckCircle2, ExternalLink, Upload, Link2, 
 import Navbar from "../components/Navbar";
 import { generateQuestions, createForm, extractFileText, extractDriveUrl, type ParsedQuestion } from "../lib/api";
 import QuestionEditor from "../components/QuestionEditor";
+import QuestionPreview from "../components/QuestionPreview";
 import CopyLinkButton from "../components/CopyLinkButton";
 import UnlockDialog from "../components/UnlockDialog";
 
@@ -36,6 +37,7 @@ export default function NewForm() {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<{ responderUri: string; editUri: string } | null>(null);
+  const [editMode, setEditMode] = useState(false);
   const [unlock, setUnlock] = useState<{ open: boolean; used?: number; limit?: number; scope?: string; message?: string }>({ open: false });
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -79,6 +81,7 @@ export default function NewForm() {
   async function generate() {
     setError("");
     setLoading(true);
+    setEditMode(false);
     try {
       const { questions: qs, meta: m } = await generateQuestions(text, sourceType);
       setQuestions(qs);
@@ -257,16 +260,27 @@ export default function NewForm() {
           <div className="mt-8">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h2 className="font-display text-xl font-bold">Editor · {questions.length} questions</h2>
+                <h2 className="font-display text-xl font-bold">
+                  {editMode ? "Editor" : "Preview"} · {questions.length} questions
+                </h2>
                 {meta && meta.estimatedMinutes > 0 && (
                   <p className="mt-1 text-xs text-ink/60 dark:text-[#F5EDE7]/60">
                     Estimated time to complete: <span className="font-semibold text-brand">~{meta.estimatedMinutes} min</span>
                   </p>
                 )}
               </div>
-              <button onClick={publish} disabled={creating} className="btn-primary">
-                {creating ? "Creating Google Form..." : "Create Google Form"}
-              </button>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditMode(!editMode)}
+                  className="btn-secondary"
+                >
+                  {editMode ? "Preview" : "✏ Edit questions"}
+                </button>
+                <button onClick={publish} disabled={creating} className="btn-primary">
+                  {creating ? "Creating Google Form..." : "Create Google Form"}
+                </button>
+              </div>
             </div>
             {meta && meta.warnings.length > 0 && (
               <div className="mb-4 space-y-2">
@@ -277,10 +291,18 @@ export default function NewForm() {
                 ))}
               </div>
             )}
-            <QuestionEditor
-              questions={questions}
-              onChange={setQuestions}
-            />
+            {editMode ? (
+              <QuestionEditor
+                questions={questions}
+                onChange={setQuestions}
+              />
+            ) : (
+              <div className="space-y-3">
+                {questions.map((q, i) => (
+                  <QuestionPreview key={i} q={q} index={i} />
+                ))}
+              </div>
+            )}
           </div>
         )}
       </main>
