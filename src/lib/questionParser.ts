@@ -15,7 +15,6 @@ export interface ParsedQuestion {
   type: QuestionType;
   text: string;
   options: ParsedOption[];
-  answer?: string;   // detected answer if present
   required: boolean;
 }
 
@@ -37,7 +36,6 @@ function detectQuestionType(
 ): QuestionType {
   const lower = questionText.toLowerCase();
 
-  // True/False detection
   if (
     options.length === 0 &&
     (lower.includes("true or false") || lower.includes("true/false"))
@@ -50,15 +48,12 @@ function detectQuestionType(
     )
   ) return "true_false";
 
-  // Checkbox detection — "select all", "choose all", "mark all"
   if (
     /select all|choose all|mark all|all that apply/i.test(lower)
   ) return "checkbox";
 
-  // MCQ
   if (options.length >= 2) return "multiple_choice";
 
-  // Paragraph — long answer hints
   if (
     /explain|describe|discuss|elaborate|justify|analyse|analyze|evaluate|compare/i.test(lower)
   ) return "paragraph";
@@ -69,11 +64,11 @@ function detectQuestionType(
 // ─── Option line detection ───────────────────────────────────────────────────
 
 const OPTION_PATTERNS = [
-  /^([A-Ea-e])[).:\-]\s+(.+)$/,          // A. B) C: D-
-  /^\(([A-Ea-e])\)\s+(.+)$/,             // (A) (B)
-  /^([1-5])[).:\-]\s+(.+)$/,             // 1. 2) 3:
-  /^\(([1-5])\)\s+(.+)$/,               // (1) (2)
-  /^([ivxIVX]+)[).:\-]\s+(.+)$/,        // i. ii) iii.
+  /^([A-Ea-e])[).:\-]\s+(.+)$/,
+  /^\(([A-Ea-e])\)\s+(.+)$/,
+  /^([1-5])[).:\-]\s+(.+)$/,
+  /^\(([1-5])\)\s+(.+)$/,
+  /^([ivxIVX]+)[).:\-]\s+(.+)$/,
 ];
 
 function parseOptionLine(line: string): ParsedOption | null {
@@ -84,15 +79,6 @@ function parseOptionLine(line: string): ParsedOption | null {
     }
   }
   return null;
-}
-
-// ─── Answer line detection ───────────────────────────────────────────────────
-
-function parseAnswerLine(line: string): string | null {
-  const match = cleanLine(line).match(
-    /^(?:answer|ans|correct answer|key)\s*[:\-]?\s*(.+)$/i
-  );
-  return match ? match[1].trim() : null;
 }
 
 // ─── Question number detection ───────────────────────────────────────────────
@@ -118,7 +104,7 @@ export function parseQuestions(rawText: string): ParseResult {
   const lines = rawText.split(/\r?\n/);
   const questions: ParsedQuestion[] = [];
 
-  let currentQuestion: Partial<ParsedQuestion> | null = null;
+  let currentQuestion: boolean = false;
   let currentOptions: ParsedOption[] = [];
   let currentLines: string[] = [];
   let qIndex = 0;
@@ -136,11 +122,10 @@ export function parseQuestions(rawText: string): ParseResult {
       type,
       text: questionText,
       options: currentOptions,
-      answer: currentQuestion.answer,
       required: true,
     });
 
-    currentQuestion = null;
+    currentQuestion = false;
     currentOptions = [];
     currentLines = [];
   }
@@ -151,45 +136,37 @@ export function parseQuestions(rawText: string): ParseResult {
 
     if (!line) continue;
 
-    // Check answer line
-    const answer = parseAnswerLine(line);
-    if (answer && currentQuestion) {
-      currentQuestion.answer = answer;
+    // Skip "Answer:" lines entirely — no grading in normal forms
+    if (/^(?:answer|ans|correct answer|key)\s*[:\-]/i.test(line)) {
       continue;
     }
 
-    // Check if it's a new question
     const qStart = isQuestionStart(line);
     if (qStart) {
       flushQuestion();
-      currentQuestion = { answer: undefined };
+      currentQuestion = true;
       currentLines = [qStart.text];
       continue;
     }
 
-    // Check if it's an option line
     const option = parseOptionLine(line);
     if (option && currentQuestion) {
       currentOptions.push(option);
       continue;
     }
 
-    // If no question started yet, skip
     if (!currentQuestion) continue;
 
-    // Multi-line question text (continuation)
     if (currentOptions.length === 0) {
       currentLines.push(line);
-    }
-    // Text after options = likely next question without a number, treat as new
-    else {
+    } else {
       flushQuestion();
-      currentQuestion = { answer: undefined };
+      currentQuestion = true;
       currentLines = [line];
     }
   }
 
-  flushQuestion(); // flush last
+  flushQuestion();
 
   if (questions.length === 0) {
     return {
@@ -211,6 +188,5 @@ export function toFormsPayload(questions: ParsedQuestion[]) {
     questionType: q.type,
     required: q.required,
     options: q.options.map((o) => o.text),
-    correctAnswer: q.answer ?? null,
   }));
 }
