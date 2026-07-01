@@ -241,7 +241,7 @@ export default function NewForm() {
                 Use example
               </button>
             </div>
-            {error && <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-300">{error}</p>}
+            {error && <ErrorCard error={error} onDismiss={() => setError("")} onRetry={questions ? publish : generate} />}
             <button onClick={generate} disabled={!text.trim() || loading} className="btn-primary">
               {loading ? (
                 <>
