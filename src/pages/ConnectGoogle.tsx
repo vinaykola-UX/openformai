@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { doc, getDoc } from "firebase/firestore";
 import { CheckCircle2, Link as LinkIcon, ArrowLeft } from "lucide-react";
 import Navbar from "../components/Navbar";
+import ErrorCard from "../components/ErrorCard";
 import { db } from "../lib/firebase";
 import { useAuth } from "../contexts/AuthContext";
 import { getGoogleAuthUrl } from "../lib/api";
