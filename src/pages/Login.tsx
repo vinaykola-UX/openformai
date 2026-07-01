@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import Navbar from "../components/Navbar";
 import GoogleIcon from "../components/GoogleIcon";
+import ErrorCard from "../components/ErrorCard";
 import { Sparkles, Loader2 } from "lucide-react";
 
 export default function Login() {
