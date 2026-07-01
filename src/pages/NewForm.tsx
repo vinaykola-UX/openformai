@@ -7,6 +7,7 @@ import QuestionEditor from "../components/QuestionEditor";
 import QuestionPreview from "../components/QuestionPreview";
 import CopyLinkButton from "../components/CopyLinkButton";
 import UnlockDialog from "../components/UnlockDialog";
+import ErrorCard from "../components/ErrorCard";
 
 const EXAMPLE = `1. What is your full name?
 
