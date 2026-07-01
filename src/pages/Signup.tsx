@@ -45,9 +45,9 @@ export default function Signup() {
           </div>
 
           {error && (
-            <p className="mb-4 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-300">
-              {error}
-            </p>
+            <div className="mb-4">
+              <ErrorCard error={error} onDismiss={() => setError("")} />
+            </div>
           )}
 
           <button
