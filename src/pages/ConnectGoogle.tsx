@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { doc, getDoc } from "firebase/firestore";
 import { CheckCircle2, Link as LinkIcon, ArrowLeft } from "lucide-react";
 import Navbar from "../components/Navbar";
+import ErrorCard from "../components/ErrorCard";
 import { db } from "../lib/firebase";
 import { useAuth } from "../contexts/AuthContext";
 import { getGoogleAuthUrl } from "../lib/api";
@@ -51,7 +52,7 @@ export default function ConnectGoogle() {
             <li>✓ Scope requested: <code className="rounded bg-brand/5 px-1.5 py-0.5">forms.body</code></li>
             <li>✓ You can revoke access anytime from your Google account</li>
           </ul>
-          {error && <p className="mt-4 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+          {error && <div className="mt-4"><ErrorCard error={error} onDismiss={() => setError("")} /></div>}
           <button onClick={connect} disabled={loading} className="btn-primary mt-6">
             {loading ? "Redirecting..." : connected ? "Reconnect" : "Connect Google"}
           </button>

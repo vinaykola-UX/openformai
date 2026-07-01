@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import Navbar from "../components/Navbar";
 import GoogleIcon from "../components/GoogleIcon";
+import ErrorCard from "../components/ErrorCard";
 import { Sparkles, Loader2 } from "lucide-react";
 
 export default function Login() {
@@ -44,9 +45,9 @@ export default function Login() {
           </div>
 
           {error && (
-            <p className="mb-4 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-300">
-              {error}
-            </p>
+            <div className="mb-4">
+              <ErrorCard error={error} onDismiss={() => setError("")} />
+            </div>
           )}
 
           <button
