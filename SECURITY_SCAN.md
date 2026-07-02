@@ -18,6 +18,19 @@ This file tracks security findings, runtime bugs, and crashes for the OpenForm p
 
 **Status: 🟢 No active security issues or crashes detected.**
 
+## Automated CI Scans
+
+`.github/workflows/security-scan.yml` runs on every push, every pull request, and weekly (Mon 06:00 UTC):
+
+| Job | Purpose |
+|---|---|
+| `npm audit` | Fails on any high or critical dependency vulnerability |
+| CodeQL | Static analysis for JS/TS with `security-and-quality` query pack |
+| Gitleaks | Scans commits and history for leaked secrets/API keys |
+| Build | Verifies `npm run build` passes so security fixes don't break prod |
+
+Results appear in the repo's **Actions** tab; CodeQL findings also land in **Security → Code scanning**. Failures block merges when branch protection is enabled on the default branch.
+
 ---
 
 ## Security Posture Overview
