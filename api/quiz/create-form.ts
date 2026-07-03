@@ -25,12 +25,8 @@ function buildItem(q: QuizQuestion, index: number, isQuiz: boolean) {
         correctAnswers: {
           answers: (q.correctAnswers || []).map((value) => ({ value })),
         },
-        whenRight: q.explanation
-          ? { text: q.explanation }
-          : undefined,
-        whenWrong: q.explanation
-          ? { text: q.explanation }
-          : undefined,
+        whenRight: q.explanation ? { text: q.explanation } : undefined,
+        whenWrong: q.explanation ? { text: q.explanation } : undefined,
       }
     : undefined;
 
@@ -53,9 +49,7 @@ function buildItem(q: QuizQuestion, index: number, isQuiz: boolean) {
   }
 
   const options =
-    q.type === "TRUE_FALSE"
-      ? ["True", "False"]
-      : q.options || [];
+    q.type === "TRUE_FALSE" ? ["True", "False"] : q.options || [];
 
   return {
     createItem: {
@@ -100,13 +94,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: "Google account not connected. Visit /connect-google." });
     }
 
-    // Reuse the same free-tier limits as create-form.
     const DAILY_LIMIT = 5;
     const TOTAL_LIMIT = 80;
+
     if (!userData.unlocked) {
-      const now = new Date();
-      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const totalSnap = await db.collection("forms").where("uid", "==", uid).count().get();
+      // Total limit — simple count, no index needed
+      const totalSnap = await db
+        .collection("forms")
+        .where("uid", "==", uid)
+        .count()
+        .get();
       const totalUsed = totalSnap.data().count;
       if (totalUsed >= TOTAL_LIMIT) {
         return res.status(403).json({
@@ -117,13 +114,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           used: totalUsed,
         });
       }
-      const daySnap = await db
+
+      // Daily limit — fetch all docs and filter client-side, no composite index needed
+      const allSnap = await db
         .collection("forms")
         .where("uid", "==", uid)
-        .where("createdAt", ">=", startOfDay)
-        .count()
         .get();
-      const dayUsed = daySnap.data().count;
+      const now = new Date();
+      const startOfDay = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate()
+      ).getTime();
+      const dayUsed = allSnap.docs.filter((d) => {
+        const ts = d.data().createdAt?.toMillis?.();
+        return typeof ts === "number" && ts >= startOfDay;
+      }).length;
       if (dayUsed >= DAILY_LIMIT) {
         return res.status(429).json({
           error: `Daily limit reached (${DAILY_LIMIT} forms/day). Try again tomorrow or enter the unlock passcode.`,
