@@ -159,6 +159,12 @@ export default function Dashboard() {
                   <Plus className="h-4 w-4" /> New form
                 </Link>
                 <Link
+                  to="/ai-quiz"
+                  className="inline-flex items-center gap-2 rounded-2xl border border-white/30 bg-white/10 px-5 py-3 text-sm font-semibold text-white backdrop-blur transition hover:bg-white/20"
+                >
+                  <Sparkles className="h-4 w-4" /> AI Quiz
+                </Link>
+                <Link
                   to="/connect-google"
                   className="inline-flex items-center gap-2 rounded-2xl border border-white/30 bg-white/10 px-5 py-3 text-sm font-semibold text-white backdrop-blur transition hover:bg-white/20"
                 >
