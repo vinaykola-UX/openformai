@@ -1,6 +1,8 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { GoogleGenAI, Type } from "@google/genai";
+import { createHash } from "crypto";
 import { verifyAuth } from "../_lib/verify-auth.js";
+import { getAdmin } from "../_lib/firebase-admin.js";
 
 const SCHEMA = {
   type: Type.OBJECT,
@@ -35,7 +37,7 @@ Rules:
 - No duplicate or near-duplicate questions.
 - MCQ: exactly 4 options, exactly 1 correct answer, 3 realistic distractors from the same topic.
 - CHECKBOX: 4-6 options, 2+ correct answers listed in correctAnswers.
-- TRUE_FALSE: use MCQ format-ish but with options ["True","False"] and 1 correct answer.
+- TRUE_FALSE: options ["True","False"] and 1 correct answer.
 - SHORT / PARAGRAPH: correctAnswers = one canonical model answer.
 - Always include a short explanation (max 200 chars).
 - Points: Easy=1, Medium=2, Hard=3.
@@ -43,13 +45,25 @@ Rules:
 
 export const config = { api: { bodyParser: { sizeLimit: "8mb" } } };
 
+// ─── Cache key ───────────────────────────────────────────────────────────────
+
+function makeCacheKey(text: string, count: number, difficulty: string, questionType: string) {
+  const raw = `${text.slice(0, 40000)}|${count}|${difficulty}|${questionType}`;
+  return createHash("sha256").update(raw).digest("hex");
+}
+
+// ─── Cache TTL: 7 days ───────────────────────────────────────────────────────
+
+const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
   try {
     await verifyAuth(req);
+
     const {
       text,
-      count = 10,
+      count = 5,
       difficulty = "Mixed",
       questionType = "Mixed",
     } = (req.body || {}) as {
@@ -58,14 +72,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       difficulty?: string;
       questionType?: string;
     };
+
     if (!text || text.trim().length < 40) {
       return res.status(400).json({ error: "Need study material to generate a quiz." });
     }
-    const n = Math.max(1, Math.min(100, Number(count) || 10));
+
+    // Cap at 20 questions max — prevents large quota burns
+    const n = Math.max(1, Math.min(20, Number(count) || 5));
 
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) return res.status(500).json({ error: "GEMINI_API_KEY not configured" });
 
+    const { db } = getAdmin();
+
+    // ── Check cache ──────────────────────────────────────────────────────────
+    const cacheKey = makeCacheKey(text, n, difficulty, questionType);
+    const cacheRef = db.collection("quiz_cache").doc(cacheKey);
+    const cacheSnap = await cacheRef.get();
+
+    if (cacheSnap.exists) {
+      const cached = cacheSnap.data()!;
+      const age = Date.now() - (cached.createdAt?.toMillis?.() ?? 0);
+      if (age < CACHE_TTL_MS) {
+        console.log("[quiz/generate] cache hit:", cacheKey.slice(0, 12));
+        return res.status(200).json({ questions: cached.questions, fromCache: true });
+      }
+      // Cache expired — delete and regenerate
+      await cacheRef.delete();
+    }
+
+    // ── Call Gemini 2.0-flash ────────────────────────────────────────────────
     const ai = new GoogleGenAI({ apiKey });
 
     const typeInstr =
@@ -87,7 +123,7 @@ ${text.slice(0, 40000)}
 """`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-2.0-flash",
       contents: [{ role: "user", parts: [{ text: prompt }] }],
       config: {
         systemInstruction: SYSTEM,
@@ -108,11 +144,28 @@ ${text.slice(0, 40000)}
       required: true,
     }));
 
-    return res.status(200).json({ questions });
+    // ── Save to cache ────────────────────────────────────────────────────────
+    try {
+      const { FieldValue } = await import("firebase-admin/firestore");
+      await cacheRef.set({
+        questions,
+        cacheKey,
+        createdAt: FieldValue.serverTimestamp(),
+      });
+      console.log("[quiz/generate] cached:", cacheKey.slice(0, 12));
+    } catch (cacheErr) {
+      // Cache write failure is non-fatal — still return questions
+      console.warn("[quiz/generate] cache write failed:", cacheErr);
+    }
+
+    return res.status(200).json({ questions, fromCache: false });
+
   } catch (err: any) {
     console.error("quiz/generate error", err);
     if (err.message?.includes("429") || err.message?.includes("quota")) {
-      return res.status(429).json({ error: "AI quota exceeded. Try again shortly." });
+      return res.status(429).json({
+        error: "AI quota exceeded. Try again tomorrow — same study material will use cache next time.",
+      });
     }
     return res.status(500).json({ error: err.message || "Quiz generation failed" });
   }
