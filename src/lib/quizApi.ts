@@ -1,0 +1,68 @@
+import { auth, waitForAuthReady } from "./firebase";
+
+async function headers(): Promise<Record<string, string>> {
+  let user = auth.currentUser;
+  if (!user) user = await waitForAuthReady();
+  if (!user) throw new Error("Not authenticated");
+  const token = await user.getIdToken(false);
+  return { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+}
+
+async function call<T>(path: string, body: any): Promise<T> {
+  const res = await fetch(path, {
+    method: "POST",
+    headers: await headers(),
+    body: JSON.stringify(body),
+  });
+  const ct = res.headers.get("content-type") || "";
+  const data = ct.includes("application/json") ? await res.json() : { error: (await res.text()).slice(0, 400) };
+  if (!res.ok) {
+    const err = new Error(data.error || `Request failed (${res.status})`) as any;
+    err.code = data.code;
+    err.status = res.status;
+    err.data = data;
+    throw err;
+  }
+  return data as T;
+}
+
+export type QuizAnalysis = {
+  subject: string;
+  mainTopic: string;
+  subtopics: string[];
+  concepts?: string[];
+  definitions?: string[];
+  keywords?: string[];
+  formulas?: string[];
+  learningObjectives?: string[];
+  difficulty?: "Easy" | "Medium" | "Hard";
+  wordCount: number;
+  readingMinutes: number;
+};
+
+export type QuizQuestion = {
+  type: "MCQ" | "CHECKBOX" | "TRUE_FALSE" | "SHORT" | "PARAGRAPH";
+  title: string;
+  options?: string[];
+  correctAnswers?: string[];
+  explanation?: string;
+  points?: number;
+  difficulty?: "Easy" | "Medium" | "Hard";
+  required?: boolean;
+};
+
+export const analyzeMaterial = (text: string) =>
+  call<QuizAnalysis>("/api/quiz/analyze", { text });
+
+export const generateQuiz = (opts: {
+  text: string;
+  count: number;
+  difficulty: string;
+  questionType: string;
+}) => call<{ questions: QuizQuestion[] }>("/api/quiz/generate", opts);
+
+export const createQuizForm = (opts: {
+  title: string;
+  questions: QuizQuestion[];
+  mode: "quiz" | "form";
+}) => call<{ formId: string; responderUri: string; editUri: string }>("/api/quiz/create-form", opts);

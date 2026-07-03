@@ -7,6 +7,7 @@ import Dashboard from "./pages/Dashboard";
 import NewForm from "./pages/NewForm";
 import ConnectGoogle from "./pages/ConnectGoogle";
 import GoogleCallback from "./pages/GoogleCallback";
+import AIQuiz from "./pages/AIQuiz";
 import Privacy from "./pages/Privacy";
 import Terms from "./pages/Terms";
 import NotFound from "./pages/NotFound";
@@ -23,6 +24,14 @@ export default function App() {
         element={
           <ProtectedRoute>
             <Dashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/ai-quiz"
+        element={
+          <ProtectedRoute>
+            <AIQuiz />
           </ProtectedRoute>
         }
       />
