@@ -31,7 +31,7 @@ const SCHEMA = {
   required: ["questions"],
 };
 
-const SYSTEM = `You are an expert educator writing high-quality quiz questions from study material.
+const SYSTEM = `You are an expert educator writing high-quality quiz questions from study material. Respond ONLY with valid JSON matching the schema: {"questions":[{"type":"MCQ"|"CHECKBOX"|"TRUE_FALSE"|"SHORT"|"PARAGRAPH","title":string,"options":string[],"correctAnswers":string[],"explanation":string,"points":number,"difficulty":"Easy"|"Medium"|"Hard"}]}.
 
 Rules:
 - Only use facts explicitly present in the material — never hallucinate.
@@ -183,7 +183,7 @@ export default async function handler(
         .json({ error: "Need study material to generate a quiz." });
     }
 
-    const n = Math.max(1, Math.min(20, Number(count) || 5));
+    const n = Math.max(1, Math.min(100, Number(count) || 5));
     const groqKey = process.env.GROQ_API_KEY;
     const { db } = getAdmin();
 
