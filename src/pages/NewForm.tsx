@@ -32,6 +32,7 @@ export default function NewForm() {
   const [sourceType, setSourceType] = useState<string>("text");
   const [importing, setImporting] = useState<"file" | "drive" | null>(null);
   const [importMsg, setImportMsg] = useState("");
+  const [uploadStatus, setUploadStatus] = useState("");
   const [questions, setQuestions] = useState<ParsedQuestion[] | null>(null);
   const [meta, setMeta] = useState<{ estimatedMinutes: number; warnings: { index: number; type: string; message: string }[] } | null>(null);
   const [loading, setLoading] = useState(false);
@@ -48,6 +49,25 @@ export default function NewForm() {
     setError("");
     setImportMsg("");
     setImporting("file");
+
+    const isPdf = /\.pdf$/i.test(file.name) || file.type.includes("pdf");
+    const messages = isPdf
+      ? [
+          "📄 Reading PDF...",
+          "🔍 Extracting text from pages...",
+          "🧠 Understanding content structure...",
+          "✂️ Processing extracted text...",
+          "✅ Almost ready...",
+        ]
+      : ["📂 Reading file...", "🔍 Extracting content...", "✅ Almost ready..."];
+
+    let idx = 0;
+    setUploadStatus(messages[0]);
+    const interval = setInterval(() => {
+      idx = Math.min(idx + 1, messages.length - 1);
+      setUploadStatus(messages[idx]);
+    }, 2500);
+
     try {
       const extracted = await extractFileText(file);
       const ext = file.name.split(".").pop()?.toLowerCase() ?? "text";
@@ -57,6 +77,8 @@ export default function NewForm() {
     } catch (err: any) {
       setError(err.message || "File import failed");
     } finally {
+      clearInterval(interval);
+      setUploadStatus("");
       setImporting(null);
     }
   }
@@ -194,6 +216,11 @@ export default function NewForm() {
                 >
                   {importing === "file" ? <><Loader2 className="h-4 w-4 animate-spin" /> Extracting...</> : <>Choose file</>}
                 </button>
+                {importing === "file" && uploadStatus && (
+                  <div className="mt-2 flex items-center gap-2 rounded-xl bg-brand/5 px-3 py-2 text-xs font-medium text-brand animate-pulse">
+                    {uploadStatus}
+                  </div>
+                )}
               </div>
               <div className="rounded-2xl border border-dashed border-brand/20 bg-cream/60 p-4 dark:border-white/10 dark:bg-white/5">
                 <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-ink/60 dark:text-[#F5EDE7]/60">

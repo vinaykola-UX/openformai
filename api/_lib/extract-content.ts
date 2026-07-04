@@ -15,6 +15,12 @@ export async function extractContent(
   if (mt.includes("pdf") || name.endsWith(".pdf")) {
     const uint8 = new Uint8Array(buf);
     const pdf = await getDocumentProxy(uint8);
+    const pageCount = pdf.numPages;
+    if (pageCount > 10) {
+      throw new Error(
+        `This PDF has ${pageCount} pages. Please upload a PDF with 10 pages or fewer, or split it into smaller files.`
+      );
+    }
     const { text } = await extractText(pdf, { mergePages: true });
     const raw = typeof text === "string" ? text : (text as string[]).join("\n");
     const cleaned = raw.replace(/\r\n/g, "\n").trim();
