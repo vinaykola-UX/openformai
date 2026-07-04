@@ -1,8 +1,9 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { GoogleGenAI, Type } from "@google/genai";
+import { Type } from "@google/genai";
 import { createHash } from "crypto";
 import { verifyAuth } from "../_lib/verify-auth.js";
 import { getAdmin } from "../_lib/firebase-admin.js";
+import { geminiWithFallback, isQuotaError } from "../_lib/gemini-keys.js";
 
 const SCHEMA = {
   type: Type.OBJECT,
@@ -47,17 +48,120 @@ export const config = { api: { bodyParser: { sizeLimit: "8mb" } } };
 
 // ─── Cache key ───────────────────────────────────────────────────────────────
 
-function makeCacheKey(text: string, count: number, difficulty: string, questionType: string) {
+function makeCacheKey(
+  text: string,
+  count: number,
+  difficulty: string,
+  questionType: string
+) {
   const raw = `${text.slice(0, 40000)}|${count}|${difficulty}|${questionType}`;
   return createHash("sha256").update(raw).digest("hex");
 }
 
-// ─── Cache TTL: 7 days ───────────────────────────────────────────────────────
-
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+// ─── Build prompt ─────────────────────────────────────────────────────────────
+
+function buildPrompt(
+  text: string,
+  n: number,
+  difficulty: string,
+  questionType: string
+): string {
+  const typeInstr =
+    questionType === "Mixed"
+      ? "Use a mix of MCQ, CHECKBOX, TRUE_FALSE, and short-answer types (favor MCQ)."
+      : `All questions must be type ${questionType}.`;
+  const diffInstr =
+    difficulty === "Mixed"
+      ? "Mix Easy/Medium/Hard roughly evenly."
+      : `All questions must be ${difficulty} difficulty.`;
+
+  return `Generate exactly ${n} quiz questions from the study material below.
+${typeInstr}
+${diffInstr}
+
+STUDY MATERIAL:
+"""
+${text.slice(0, 40000)}
+"""`;
+}
+
+// ─── Parse questions ──────────────────────────────────────────────────────────
+
+function parseQuestions(raw: any[]): any[] {
+  return (raw || []).map((q: any) => ({
+    type: q.type,
+    title: q.title,
+    options: q.options || [],
+    correctAnswers: q.correctAnswers || [],
+    explanation: q.explanation || "",
+    points:
+      q.points ??
+      (q.difficulty === "Hard" ? 3 : q.difficulty === "Easy" ? 1 : 2),
+    difficulty: q.difficulty || "Medium",
+    required: true,
+  }));
+}
+
+// ─── Gemini with key rotation ─────────────────────────────────────────────────
+
+async function runGemini(prompt: string): Promise<any[]> {
+  const response = await geminiWithFallback((ai) =>
+    ai.models.generateContent({
+      model: "gemini-2.5-flash-lite",
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      config: {
+        systemInstruction: SYSTEM,
+        responseMimeType: "application/json",
+        responseSchema: SCHEMA as any,
+      },
+    })
+  );
+  const parsed = JSON.parse(response.text || "{}");
+  return parseQuestions(parsed.questions);
+}
+
+// ─── Groq fallback ────────────────────────────────────────────────────────────
+
+async function runGroq(prompt: string, apiKey: string): Promise<any[]> {
+  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: "llama-3.3-70b-versatile",
+      messages: [
+        { role: "system", content: SYSTEM },
+        { role: "user", content: prompt },
+      ],
+      response_format: { type: "json_object" },
+      temperature: 0.3,
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.error?.message || `Groq error ${res.status}`);
+  }
+
+  const data = await res.json();
+  const content = data.choices?.[0]?.message?.content || "{}";
+  const parsed = JSON.parse(content);
+  return parseQuestions(parsed.questions);
+}
+
+// ─── Main handler ─────────────────────────────────────────────────────────────
+
+export default async function handler(
+  req: VercelRequest,
+  res: VercelResponse
+) {
+  if (req.method !== "POST")
+    return res.status(405).json({ error: "Method not allowed" });
+
   try {
     await verifyAuth(req);
 
@@ -74,15 +178,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     };
 
     if (!text || text.trim().length < 40) {
-      return res.status(400).json({ error: "Need study material to generate a quiz." });
+      return res
+        .status(400)
+        .json({ error: "Need study material to generate a quiz." });
     }
 
-    // Cap at 20 questions max — prevents large quota burns
     const n = Math.max(1, Math.min(20, Number(count) || 5));
-
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) return res.status(500).json({ error: "GEMINI_API_KEY not configured" });
-
+    const groqKey = process.env.GROQ_API_KEY;
     const { db } = getAdmin();
 
     // ── Check cache ──────────────────────────────────────────────────────────
@@ -95,54 +197,51 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const age = Date.now() - (cached.createdAt?.toMillis?.() ?? 0);
       if (age < CACHE_TTL_MS) {
         console.log("[quiz/generate] cache hit:", cacheKey.slice(0, 12));
-        return res.status(200).json({ questions: cached.questions, fromCache: true });
+        return res
+          .status(200)
+          .json({ questions: cached.questions, fromCache: true });
       }
-      // Cache expired — delete and regenerate
       await cacheRef.delete();
     }
 
-    // ── Call Gemini 2.0-flash ────────────────────────────────────────────────
-    const ai = new GoogleGenAI({ apiKey });
+    const prompt = buildPrompt(text, n, difficulty, questionType);
 
-    const typeInstr =
-      questionType === "Mixed"
-        ? "Use a mix of MCQ, CHECKBOX, TRUE_FALSE, and short-answer types (favor MCQ)."
-        : `All questions must be type ${questionType}.`;
-    const diffInstr =
-      difficulty === "Mixed"
-        ? "Mix Easy/Medium/Hard roughly evenly."
-        : `All questions must be ${difficulty} difficulty.`;
+    // ── Try Gemini with key rotation first ───────────────────────────────────
+    let questions: any[] | null = null;
+    let usedModel = "";
 
-    const prompt = `Generate exactly ${n} quiz questions from the study material below.
-${typeInstr}
-${diffInstr}
+    try {
+      console.log("[quiz/generate] trying Gemini 2.5 Flash-Lite...");
+      questions = await runGemini(prompt);
+      usedModel = "gemini-2.5-flash-lite";
+      console.log("[quiz/generate] Gemini success");
+    } catch (geminiErr: any) {
+      if (isQuotaError(geminiErr) || geminiErr?.allKeysExhausted) {
+        console.warn("[quiz/generate] all Gemini keys exhausted, falling back to Groq...");
+      } else {
+        console.error("[quiz/generate] Gemini error:", geminiErr.message);
+      }
+    }
 
-STUDY MATERIAL:
-"""
-${text.slice(0, 40000)}
-"""`;
+    // ── Fallback to Groq ─────────────────────────────────────────────────────
+    if (!questions && groqKey) {
+      try {
+        console.log("[quiz/generate] trying Groq Llama 3.3-70B...");
+        questions = await runGroq(prompt, groqKey);
+        usedModel = "groq-llama-3.3-70b";
+        console.log("[quiz/generate] Groq success");
+      } catch (groqErr: any) {
+        console.error("[quiz/generate] Groq error:", groqErr.message);
+      }
+    }
 
-    const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash",
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-      config: {
-        systemInstruction: SYSTEM,
-        responseMimeType: "application/json",
-        responseSchema: SCHEMA as any,
-      },
-    });
-
-    const parsed = JSON.parse(response.text || "{}");
-    const questions = (parsed.questions || []).map((q: any) => ({
-      type: q.type,
-      title: q.title,
-      options: q.options || [],
-      correctAnswers: q.correctAnswers || [],
-      explanation: q.explanation || "",
-      points: q.points ?? (q.difficulty === "Hard" ? 3 : q.difficulty === "Easy" ? 1 : 2),
-      difficulty: q.difficulty || "Medium",
-      required: true,
-    }));
+    // ── Both failed ──────────────────────────────────────────────────────────
+    if (!questions || questions.length === 0) {
+      return res.status(429).json({
+        error:
+          "All AI services are temporarily unavailable. Please try again in a few minutes.",
+      });
+    }
 
     // ── Save to cache ────────────────────────────────────────────────────────
     try {
@@ -150,23 +249,20 @@ ${text.slice(0, 40000)}
       await cacheRef.set({
         questions,
         cacheKey,
+        usedModel,
         createdAt: FieldValue.serverTimestamp(),
       });
-      console.log("[quiz/generate] cached:", cacheKey.slice(0, 12));
+      console.log("[quiz/generate] cached via", usedModel);
     } catch (cacheErr) {
-      // Cache write failure is non-fatal — still return questions
       console.warn("[quiz/generate] cache write failed:", cacheErr);
     }
 
-    return res.status(200).json({ questions, fromCache: false });
+    return res.status(200).json({ questions, fromCache: false, usedModel });
 
   } catch (err: any) {
     console.error("quiz/generate error", err);
-    if (err.message?.includes("429") || err.message?.includes("quota")) {
-      return res.status(429).json({
-        error: "AI quota exceeded. Try again tomorrow — same study material will use cache next time.",
-      });
-    }
-    return res.status(500).json({ error: err.message || "Quiz generation failed" });
+    return res.status(500).json({
+      error: err.message || "Quiz generation failed",
+    });
   }
 }
