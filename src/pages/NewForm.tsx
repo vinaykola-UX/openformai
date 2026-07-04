@@ -32,6 +32,7 @@ export default function NewForm() {
   const [sourceType, setSourceType] = useState<string>("text");
   const [importing, setImporting] = useState<"file" | "drive" | null>(null);
   const [importMsg, setImportMsg] = useState("");
+  const [uploadStatus, setUploadStatus] = useState("");
   const [questions, setQuestions] = useState<ParsedQuestion[] | null>(null);
   const [meta, setMeta] = useState<{ estimatedMinutes: number; warnings: { index: number; type: string; message: string }[] } | null>(null);
   const [loading, setLoading] = useState(false);
@@ -48,6 +49,25 @@ export default function NewForm() {
     setError("");
     setImportMsg("");
     setImporting("file");
+
+    const isPdf = /\.pdf$/i.test(file.name) || file.type.includes("pdf");
+    const messages = isPdf
+      ? [
+          "📄 Reading PDF...",
+          "🔍 Extracting text from pages...",
+          "🧠 Understanding content structure...",
+          "✂️ Processing extracted text...",
+          "✅ Almost ready...",
+        ]
+      : ["📂 Reading file...", "🔍 Extracting content...", "✅ Almost ready..."];
+
+    let idx = 0;
+    setUploadStatus(messages[0]);
+    const interval = setInterval(() => {
+      idx = Math.min(idx + 1, messages.length - 1);
+      setUploadStatus(messages[idx]);
+    }, 2500);
+
     try {
       const extracted = await extractFileText(file);
       const ext = file.name.split(".").pop()?.toLowerCase() ?? "text";
@@ -57,6 +77,8 @@ export default function NewForm() {
     } catch (err: any) {
       setError(err.message || "File import failed");
     } finally {
+      clearInterval(interval);
+      setUploadStatus("");
       setImporting(null);
     }
   }
