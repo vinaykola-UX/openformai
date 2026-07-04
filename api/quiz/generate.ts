@@ -183,7 +183,7 @@ export default async function handler(
         .json({ error: "Need study material to generate a quiz." });
     }
 
-    const n = Math.max(1, Math.min(20, Number(count) || 5));
+    const n = Math.max(1, Math.min(100, Number(count) || 5));
     const groqKey = process.env.GROQ_API_KEY;
     const { db } = getAdmin();
 
