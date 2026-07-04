@@ -1,7 +1,7 @@
 // api/_lib/extract-content.ts
 // Shared content extraction used by /api/extract and /api/drive-import.
-import { GoogleGenAI } from "@google/genai";
 import { extractText, getDocumentProxy } from "unpdf";
+import { geminiWithFallback } from "./gemini-keys.js";
 
 export async function extractContent(
   buf: Buffer,
@@ -11,6 +11,7 @@ export async function extractContent(
   const name = (filename || "").toLowerCase();
   const mt = (mimeType || "").toLowerCase();
 
+  // ─── PDF ──────────────────────────────────────────────────────────────────
   if (mt.includes("pdf") || name.endsWith(".pdf")) {
     const uint8 = new Uint8Array(buf);
     const pdf = await getDocumentProxy(uint8);
@@ -18,34 +19,39 @@ export async function extractContent(
     const raw = typeof text === "string" ? text : (text as string[]).join("\n");
     const cleaned = raw.replace(/\r\n/g, "\n").trim();
 
-    // If text is too short, it's likely a scanned PDF — fall back to Gemini OCR
+    // Searchable PDF — free, instant, no AI needed
     if (cleaned.length >= 50) return cleaned;
 
+    // Scanned PDF — needs Gemini OCR, rotate through all keys
     console.log("[extract] scanned PDF detected, falling back to Gemini OCR");
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) throw new Error("GEMINI_API_KEY not configured — cannot OCR scanned PDF");
-
-    const ai = new GoogleGenAI({ apiKey });
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash-lite",
-      contents: [
-        {
-          role: "user",
-          parts: [
-            {
-              text:
-                "Extract every exam question and any answer key visible in this scanned PDF. " +
-                "Preserve question numbers, option letters, and the literal text. " +
-                "Return plain text only — no commentary.",
-            },
-            { inlineData: { mimeType: "application/pdf", data: buf.toString("base64") } },
-          ],
-        },
-      ],
-    });
+    const response = await geminiWithFallback((ai) =>
+      ai.models.generateContent({
+        model: "gemini-2.5-flash-lite",
+        contents: [
+          {
+            role: "user",
+            parts: [
+              {
+                text:
+                  "Extract every exam question and any answer key visible in this scanned PDF. " +
+                  "Preserve question numbers, option letters, and the literal text. " +
+                  "Return plain text only — no commentary.",
+              },
+              {
+                inlineData: {
+                  mimeType: "application/pdf",
+                  data: buf.toString("base64"),
+                },
+              },
+            ],
+          },
+        ],
+      })
+    );
     return (response.text || "").trim();
   }
 
+  // ─── DOCX ─────────────────────────────────────────────────────────────────
   if (
     mt.includes("officedocument.wordprocessingml") ||
     name.endsWith(".docx")
@@ -56,6 +62,7 @@ export async function extractContent(
     return (result.value || "").replace(/\r\n/g, "\n").trim();
   }
 
+  // ─── XLSX / XLS ───────────────────────────────────────────────────────────
   if (
     mt.includes("spreadsheetml.sheet") ||
     mt.includes("ms-excel") ||
@@ -74,6 +81,7 @@ export async function extractContent(
     return parts.join("\n\n").trim();
   }
 
+  // ─── TXT / MD / CSV ───────────────────────────────────────────────────────
   if (
     mt.startsWith("text/") ||
     name.endsWith(".txt") ||
@@ -83,31 +91,36 @@ export async function extractContent(
     return buf.toString("utf-8").replace(/\r\n/g, "\n").trim();
   }
 
+  // ─── Image — rotate through all Gemini keys ───────────────────────────────
   if (
     mt.startsWith("image/") ||
     /\.(png|jpe?g|webp|gif|bmp|heic|heif)$/i.test(name)
   ) {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) throw new Error("GEMINI_API_KEY not configured");
-    const ai = new GoogleGenAI({ apiKey });
     const imageMime = mt.startsWith("image/") ? mt : "image/png";
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash-lite",
-      contents: [
-        {
-          role: "user",
-          parts: [
-            {
-              text:
-                "Extract every exam question and any answer key visible in this image. " +
-                "Preserve question numbers, option letters, and the literal text. " +
-                "Return plain text only — no commentary.",
-            },
-            { inlineData: { mimeType: imageMime, data: buf.toString("base64") } },
-          ],
-        },
-      ],
-    });
+    const response = await geminiWithFallback((ai) =>
+      ai.models.generateContent({
+        model: "gemini-2.5-flash-lite",
+        contents: [
+          {
+            role: "user",
+            parts: [
+              {
+                text:
+                  "Extract every exam question and any answer key visible in this image. " +
+                  "Preserve question numbers, option letters, and the literal text. " +
+                  "Return plain text only — no commentary.",
+              },
+              {
+                inlineData: {
+                  mimeType: imageMime,
+                  data: buf.toString("base64"),
+                },
+              },
+            ],
+          },
+        ],
+      })
+    );
     return (response.text || "").trim();
   }
 
