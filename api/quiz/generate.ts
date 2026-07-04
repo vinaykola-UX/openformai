@@ -31,7 +31,7 @@ const SCHEMA = {
   required: ["questions"],
 };
 
-const SYSTEM = `You are an expert educator writing high-quality quiz questions from study material.
+const SYSTEM = `You are an expert educator writing high-quality quiz questions from study material. Respond ONLY with valid JSON matching the schema: {"questions":[{"type":"MCQ"|"CHECKBOX"|"TRUE_FALSE"|"SHORT"|"PARAGRAPH","title":string,"options":string[],"correctAnswers":string[],"explanation":string,"points":number,"difficulty":"Easy"|"Medium"|"Hard"}]}.
 
 Rules:
 - Only use facts explicitly present in the material — never hallucinate.
