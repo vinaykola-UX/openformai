@@ -1,7 +1,8 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { GoogleGenAI, Type } from "@google/genai";
+import { Type } from "@google/genai";
 import { verifyAuth } from "./_lib/verify-auth.js";
-import { parseQuestions, toFormsPayload } from "../src/lib/questionParser.js";
+import { parseQuestions } from "../src/lib/questionParser.js";
+import { geminiWithFallback, isQuotaError } from "./_lib/gemini-keys.js";
 
 const SCHEMA = {
   type: Type.OBJECT,
@@ -58,7 +59,7 @@ function mapType(parserType: string): string {
   switch (parserType) {
     case "multiple_choice": return "MCQ";
     case "checkbox":        return "CHECKBOX";
-    case "true_false":      return "MCQ"; // True/False becomes MCQ with True/False options
+    case "true_false":      return "MCQ";
     case "short_answer":    return "SHORT";
     case "paragraph":       return "PARAGRAPH";
     default:                return "SHORT";
@@ -70,21 +71,16 @@ function mapType(parserType: string): string {
 function runLocalParser(text: string) {
   const result = parseQuestions(text);
 
-  if (result.questions.length === 0) {
-    return null; // signal: couldn't parse, caller decides what to do
-  }
+  if (result.questions.length === 0) return null;
 
-  const questions = result.questions.map((q) => {
-    const type = mapType(q.type);
-    return {
-      type,
-      title: q.text,
-      options: q.options.map((o) => o.text),
-      required: true,
-      suggestedTitle: undefined,
-      clarityNote: undefined,
-    };
-  });
+  const questions = result.questions.map((q) => ({
+    type: mapType(q.type),
+    title: q.text,
+    options: q.options.map((o) => o.text),
+    required: true,
+    suggestedTitle: undefined,
+    clarityNote: undefined,
+  }));
 
   return {
     questions,
@@ -96,19 +92,20 @@ function runLocalParser(text: string) {
   };
 }
 
-// ─── Gemini path (images + scanned PDFs only) ─────────────────────────────────
+// ─── Gemini path — rotates through all keys ───────────────────────────────────
 
-async function runGemini(text: string, apiKey: string) {
-  const ai = new GoogleGenAI({ apiKey });
-  const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash-lite",
-    contents: [{ role: "user", parts: [{ text }] }],
-    config: {
-      systemInstruction: SYSTEM,
-      responseMimeType: "application/json",
-      responseSchema: SCHEMA as any,
-    },
-  });
+async function runGemini(text: string) {
+  const response = await geminiWithFallback((ai) =>
+    ai.models.generateContent({
+      model: "gemini-2.5-flash-lite",
+      contents: [{ role: "user", parts: [{ text }] }],
+      config: {
+        systemInstruction: SYSTEM,
+        responseMimeType: "application/json",
+        responseSchema: SCHEMA as any,
+      },
+    })
+  );
 
   const parsed = JSON.parse(response.text || "{}");
 
@@ -162,23 +159,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    // ── Path B: image / scanned_pdf → Gemini ──
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) return res.status(500).json({ error: "GEMINI_API_KEY not configured" });
-
-    const aiResult = await runGemini(text, apiKey);
+    // ── Path B: image / scanned_pdf → Gemini key rotation ──
+    const aiResult = await runGemini(text);
     return res.status(200).json(aiResult);
 
   } catch (err: any) {
     console.error("generate error", err);
 
-    if (
-      err.message?.includes("429") ||
-      err.message?.includes("RESOURCE_EXHAUSTED") ||
-      err.message?.includes("quota")
-    ) {
+    if (isQuotaError(err) || err?.allKeysExhausted) {
       return res.status(429).json({
-        error: "AI quota exceeded. Paste text directly — that path never uses AI.",
+        error: "AI quota exceeded on all keys. Paste text directly — that path never uses AI.",
         usedAI: true,
       });
     }
