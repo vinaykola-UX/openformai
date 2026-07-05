@@ -33,6 +33,8 @@ export default function NewForm() {
   const [importing, setImporting] = useState<"file" | "drive" | null>(null);
   const [importMsg, setImportMsg] = useState("");
   const [uploadStatus, setUploadStatus] = useState("");
+  const [lastFile, setLastFile] = useState<File | null>(null);
+  const [extractCache, setExtractCache] = useState<Record<string, string>>({});
   const [questions, setQuestions] = useState<ParsedQuestion[] | null>(null);
   const [meta, setMeta] = useState<{ estimatedMinutes: number; warnings: { index: number; type: string; message: string }[] } | null>(null);
   const [loading, setLoading] = useState(false);
