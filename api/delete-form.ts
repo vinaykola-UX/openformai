@@ -47,7 +47,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    // ── Delete from Firestore ─────────────────────────────────────────────
+    // ── Delete from Firestore
+// ─────────────────────────────────────────────
     await db.collection("forms").doc(formId).delete();
 
     return res.status(200).json({ ok: true });
