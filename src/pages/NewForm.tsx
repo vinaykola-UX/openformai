@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowLeft, Sparkles, Wand2, CheckCircle2, ExternalLink, Upload, Link2, Loader2 } from "lucide-react";
+import { ArrowLeft, Sparkles, Wand2, CheckCircle2, ExternalLink, Upload, Link2, Loader2, RotateCcw } from "lucide-react";
 import Navbar from "../components/Navbar";
 import { generateQuestions, createForm, extractFileText, extractDriveUrl, type ParsedQuestion } from "../lib/api";
 import QuestionEditor from "../components/QuestionEditor";
