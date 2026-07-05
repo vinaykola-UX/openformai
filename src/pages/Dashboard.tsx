@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   collection,
   doc,
@@ -21,6 +21,7 @@ import {
   Search,
   Loader2,
   Lock,
+  BarChart2,
   Infinity as InfinityIcon,
 } from "lucide-react";
 import Navbar from "../components/Navbar";
@@ -82,7 +83,6 @@ export default function Dashboard() {
         id: d.id,
         ...(d.data() as Omit<FormDoc, "id">),
       }));
-      // Sort client-side — no composite index needed
       list.sort((a, b) => {
         const at = a.createdAt?.toMillis?.() ?? 0;
         const bt = b.createdAt?.toMillis?.() ?? 0;
@@ -91,7 +91,6 @@ export default function Dashboard() {
       return list;
     };
 
-    // Only use simple where query — no orderBy — avoids composite index requirement
     const baseQ = query(collection(db, "forms"), where("uid", "==", user.uid));
 
     const unsub = onSnapshot(
@@ -324,6 +323,7 @@ function QuickAction({ to, title, description, icon }: { to: string; title: stri
 }
 
 function FormCard({ form }: { form: FormDoc }) {
+  const nav = useNavigate();
   return (
     <div className="card group flex flex-col gap-4 p-5 transition hover:-translate-y-0.5 hover:shadow-glow">
       <div className="flex items-start justify-between gap-3">
@@ -360,6 +360,12 @@ function FormCard({ form }: { form: FormDoc }) {
           <Pencil className="h-3.5 w-3.5" /> Edit
         </a>
         <CopyLinkButton url={form.responderUri} size="sm" label="Copy link" />
+        <button
+          onClick={() => nav(`/dashboard/analytics/${form.id}`)}
+          className="btn-ghost !py-2 !px-3 text-xs"
+        >
+          <BarChart2 className="h-3.5 w-3.5" /> Analytics
+        </button>
       </div>
     </div>
   );
