@@ -42,6 +42,7 @@ export default function NewForm() {
   const [error, setError] = useState("");
   const [result, setResult] = useState<{ responderUri: string; editUri: string } | null>(null);
   const [editMode, setEditMode] = useState(false);
+  const [expiresAt, setExpiresAt] = useState<string>("");
   const [unlock, setUnlock] = useState<{ open: boolean; used?: number; limit?: number; scope?: string; message?: string }>({ open: false });
 
   function fileKey(f: File) {
@@ -160,7 +161,7 @@ export default function NewForm() {
     setError("");
     setCreating(true);
     try {
-      const r = await createForm(title, questions);
+      const r = await createForm(title, questions, expiresAt || null);
       setResult(r);
     } catch (err: any) {
       if (err?.code === "LIMIT_REACHED" || err?.code === "DAILY_LIMIT_REACHED") {
@@ -196,6 +197,11 @@ export default function NewForm() {
               />
               <CopyLinkButton url={result.responderUri} size="sm" label="Copy" />
             </div>
+            {expiresAt && (
+              <p className="mt-2 text-xs text-ink/60 dark:text-[#F5EDE7]/60">
+                ⏰ Closes on {new Date(expiresAt).toLocaleString()}
+              </p>
+            )}
             <div className="mt-4 flex flex-col gap-3">
               <a href={result.responderUri} target="_blank" rel="noreferrer" className="btn-primary">
                 <ExternalLink className="h-4 w-4" /> Open responder link
@@ -227,6 +233,21 @@ export default function NewForm() {
             <div>
               <label className="label">Form title</label>
               <input value={title} onChange={(e) => setTitle(e.target.value)} className="input" />
+            </div>
+            <div>
+              <label className="label">Close responses after (optional)</label>
+              <input
+                type="datetime-local"
+                value={expiresAt}
+                onChange={(e) => setExpiresAt(e.target.value)}
+                className="input"
+                min={new Date().toISOString().slice(0, 16)}
+              />
+              {expiresAt && (
+                <p className="mt-1 text-xs text-ink/50">
+                  Form will stop accepting responses after {new Date(expiresAt).toLocaleString()}
+                </p>
+              )}
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="rounded-2xl border border-dashed border-brand/20 bg-cream/60 p-4 dark:border-white/10 dark:bg-white/5">

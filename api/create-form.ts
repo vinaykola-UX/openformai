@@ -253,7 +253,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
   try {
     const { uid } = await verifyAuth(req);
-    const { title, questions } = req.body as { title: string; questions: Question[] };
+    const { title, questions, expiresAt } = req.body as { title: string; questions: Question[]; expiresAt?: string | null };
     if (!title || !Array.isArray(questions) || !questions.length) {
       return res.status(400).json({ error: "Missing title or questions" });
     }
@@ -327,6 +327,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       responderUri,
       editUri,
       questionCount: questions.length,
+      expiresAt: expiresAt ? new Date(expiresAt) : null,
       createdAt: FieldValue.serverTimestamp(),
     });
 

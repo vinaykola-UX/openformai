@@ -108,11 +108,11 @@ export async function generateQuestions(
   };
 }
 
-export async function createForm(title: string, questions: ParsedQuestion[]) {
+export async function createForm(title: string, questions: ParsedQuestion[], expiresAt?: string | null) {
   return call<{ formId: string; responderUri: string; editUri: string }>("/api/create-form", {
     method: "POST",
     headers: await authHeaders(),
-    body: JSON.stringify({ title, questions }),
+    body: JSON.stringify({ title, questions, expiresAt: expiresAt ?? null }),
   });
 }
 

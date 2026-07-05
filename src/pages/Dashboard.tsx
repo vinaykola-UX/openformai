@@ -37,6 +37,7 @@ type FormDoc = {
   editUri: string;
   questionCount: number;
   googleFormId: string;
+  expiresAt?: any;
   createdAt?: Timestamp;
 };
 
@@ -331,6 +332,20 @@ function FormCard({ form }: { form: FormDoc }) {
           <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink/60 dark:text-[#F5EDE7]/60">
             <span className="chip"><ListChecks className="h-3 w-3" /> {form.questionCount} questions</span>
             <span className="inline-flex items-center gap-1"><Clock className="h-3 w-3" /> {formatDate(form.createdAt)}</span>
+            {form.expiresAt && (() => {
+              const exp = form.expiresAt.toDate ? form.expiresAt.toDate() : new Date(form.expiresAt);
+              const expired = exp < new Date();
+              const dateStr = exp.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+              return (
+                <span className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold ${
+                  expired
+                    ? "bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300"
+                    : "bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-200"
+                }`}>
+                  {expired ? "🔴 Closed" : `⏰ Closes ${dateStr}`}
+                </span>
+              );
+            })()}
           </div>
         </div>
         <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-peach/40 text-brand">
