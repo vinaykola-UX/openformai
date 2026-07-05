@@ -44,13 +44,29 @@ export default function NewForm() {
   const [editMode, setEditMode] = useState(false);
   const [unlock, setUnlock] = useState<{ open: boolean; used?: number; limit?: number; scope?: string; message?: string }>({ open: false });
 
-  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
+  function fileKey(f: File) {
+    return `${f.name}::${f.size}::${f.lastModified}`;
+  }
+
+  async function processFile(file: File, isRetry = false) {
     setError("");
     setImportMsg("");
     setImporting("file");
+
+    const key = fileKey(file);
+    const cached = extractCache[key];
+
+    // Save AI tokens: if we already extracted this exact file, reuse it.
+    if (isRetry && cached) {
+      const ext = file.name.split(".").pop()?.toLowerCase() ?? "text";
+      setSourceType(["jpg", "jpeg", "png", "webp", "gif"].includes(ext) ? "image" : ext);
+      setText((prev) => (prev ? prev + "\n\n" + cached : cached));
+      setImportMsg(
+        `♻️ Restored ${file.name} from cache (${cached.length.toLocaleString()} chars) — no AI tokens used.`
+      );
+      setImporting(null);
+      return;
+    }
 
     const isPdf = /\.pdf$/i.test(file.name) || file.type.includes("pdf");
     const messages = isPdf
@@ -64,10 +80,10 @@ export default function NewForm() {
       : ["📂 Reading file...", "🔍 Extracting content...", "✅ Almost ready..."];
 
     let idx = 0;
-    setUploadStatus(messages[0]);
+    setUploadStatus((isRetry ? "🔁 Retrying · " : "") + messages[0]);
     const interval = setInterval(() => {
       idx = Math.min(idx + 1, messages.length - 1);
-      setUploadStatus(messages[idx]);
+      setUploadStatus((isRetry ? "🔁 Retrying · " : "") + messages[idx]);
     }, 2500);
 
     try {
@@ -75,6 +91,7 @@ export default function NewForm() {
       const ext = file.name.split(".").pop()?.toLowerCase() ?? "text";
       setSourceType(["jpg", "jpeg", "png", "webp", "gif"].includes(ext) ? "image" : ext);
       setText((prev) => (prev ? prev + "\n\n" + extracted : extracted));
+      setExtractCache((c) => ({ ...c, [key]: extracted }));
       setImportMsg(`Imported ${file.name} (${extracted.length.toLocaleString()} chars)`);
     } catch (err: any) {
       setError(err.message || "File import failed");
@@ -84,6 +101,20 @@ export default function NewForm() {
       setImporting(null);
     }
   }
+
+  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setLastFile(file);
+    await processFile(file, false);
+  }
+
+  async function retryUpload() {
+    if (!lastFile || importing !== null) return;
+    await processFile(lastFile, true);
+  }
+
 
   async function importDrive() {
     if (!driveUrl.trim()) return;
