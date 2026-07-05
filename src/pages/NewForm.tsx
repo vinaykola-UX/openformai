@@ -241,14 +241,38 @@ export default function NewForm() {
                   className="hidden"
                   onChange={onFile}
                 />
-                <button
-                  type="button"
-                  onClick={() => fileRef.current?.click()}
-                  disabled={importing !== null}
-                  className="btn-secondary w-full"
-                >
-                  {importing === "file" ? <><Loader2 className="h-4 w-4 animate-spin" /> Extracting...</> : <>Choose file</>}
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => fileRef.current?.click()}
+                    disabled={importing !== null}
+                    className="btn-secondary flex-1"
+                  >
+                    {importing === "file" ? <><Loader2 className="h-4 w-4 animate-spin" /> Extracting...</> : <>Choose file</>}
+                  </button>
+                  {lastFile && (
+                    <button
+                      type="button"
+                      onClick={retryUpload}
+                      disabled={importing !== null}
+                      title={
+                        extractCache[fileKey(lastFile)]
+                          ? `Reuse cached extract of ${lastFile.name} (${extractCache[fileKey(lastFile)].length.toLocaleString()} chars) — no AI tokens used`
+                          : `Retry uploading ${lastFile.name}`
+                      }
+                      className="btn-secondary shrink-0"
+                    >
+                      <RotateCcw className="h-4 w-4" /> Retry
+                    </button>
+                  )}
+                </div>
+                {lastFile && !importing && (
+                  <p className="mt-2 text-[11px] text-ink/50 dark:text-[#F5EDE7]/50">
+                    {extractCache[fileKey(lastFile)]
+                      ? `♻️ Retry will reuse ${extractCache[fileKey(lastFile)].length.toLocaleString()} cached chars from "${lastFile.name}" — no AI tokens used.`
+                      : `Retry will re-attempt "${lastFile.name}" without re-selecting it.`}
+                  </p>
+                )}
                 {importing === "file" && uploadStatus && (
                   <div className="mt-2 flex items-center gap-2 rounded-xl bg-brand/5 px-3 py-2 text-xs font-medium text-brand animate-pulse">
                     {uploadStatus}
