@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowLeft, Sparkles, Wand2, CheckCircle2, ExternalLink, Upload, Link2, Loader2 } from "lucide-react";
+import { ArrowLeft, Sparkles, Wand2, CheckCircle2, ExternalLink, Upload, Link2, Loader2, RotateCcw } from "lucide-react";
 import Navbar from "../components/Navbar";
 import { generateQuestions, createForm, extractFileText, extractDriveUrl, type ParsedQuestion } from "../lib/api";
 import QuestionEditor from "../components/QuestionEditor";
@@ -33,6 +33,8 @@ export default function NewForm() {
   const [importing, setImporting] = useState<"file" | "drive" | null>(null);
   const [importMsg, setImportMsg] = useState("");
   const [uploadStatus, setUploadStatus] = useState("");
+  const [lastFile, setLastFile] = useState<File | null>(null);
+  const [extractCache, setExtractCache] = useState<Record<string, string>>({});
   const [questions, setQuestions] = useState<ParsedQuestion[] | null>(null);
   const [meta, setMeta] = useState<{ estimatedMinutes: number; warnings: { index: number; type: string; message: string }[] } | null>(null);
   const [loading, setLoading] = useState(false);
@@ -42,13 +44,29 @@ export default function NewForm() {
   const [editMode, setEditMode] = useState(false);
   const [unlock, setUnlock] = useState<{ open: boolean; used?: number; limit?: number; scope?: string; message?: string }>({ open: false });
 
-  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
+  function fileKey(f: File) {
+    return `${f.name}::${f.size}::${f.lastModified}`;
+  }
+
+  async function processFile(file: File, isRetry = false) {
     setError("");
     setImportMsg("");
     setImporting("file");
+
+    const key = fileKey(file);
+    const cached = extractCache[key];
+
+    // Save AI tokens: if we already extracted this exact file, reuse it.
+    if (isRetry && cached) {
+      const ext = file.name.split(".").pop()?.toLowerCase() ?? "text";
+      setSourceType(["jpg", "jpeg", "png", "webp", "gif"].includes(ext) ? "image" : ext);
+      setText((prev) => (prev ? prev + "\n\n" + cached : cached));
+      setImportMsg(
+        `♻️ Restored ${file.name} from cache (${cached.length.toLocaleString()} chars) — no AI tokens used.`
+      );
+      setImporting(null);
+      return;
+    }
 
     const isPdf = /\.pdf$/i.test(file.name) || file.type.includes("pdf");
     const messages = isPdf
@@ -62,10 +80,10 @@ export default function NewForm() {
       : ["📂 Reading file...", "🔍 Extracting content...", "✅ Almost ready..."];
 
     let idx = 0;
-    setUploadStatus(messages[0]);
+    setUploadStatus((isRetry ? "🔁 Retrying · " : "") + messages[0]);
     const interval = setInterval(() => {
       idx = Math.min(idx + 1, messages.length - 1);
-      setUploadStatus(messages[idx]);
+      setUploadStatus((isRetry ? "🔁 Retrying · " : "") + messages[idx]);
     }, 2500);
 
     try {
@@ -73,6 +91,7 @@ export default function NewForm() {
       const ext = file.name.split(".").pop()?.toLowerCase() ?? "text";
       setSourceType(["jpg", "jpeg", "png", "webp", "gif"].includes(ext) ? "image" : ext);
       setText((prev) => (prev ? prev + "\n\n" + extracted : extracted));
+      setExtractCache((c) => ({ ...c, [key]: extracted }));
       setImportMsg(`Imported ${file.name} (${extracted.length.toLocaleString()} chars)`);
     } catch (err: any) {
       setError(err.message || "File import failed");
@@ -82,6 +101,20 @@ export default function NewForm() {
       setImporting(null);
     }
   }
+
+  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setLastFile(file);
+    await processFile(file, false);
+  }
+
+  async function retryUpload() {
+    if (!lastFile || importing !== null) return;
+    await processFile(lastFile, true);
+  }
+
 
   async function importDrive() {
     if (!driveUrl.trim()) return;
@@ -208,14 +241,38 @@ export default function NewForm() {
                   className="hidden"
                   onChange={onFile}
                 />
-                <button
-                  type="button"
-                  onClick={() => fileRef.current?.click()}
-                  disabled={importing !== null}
-                  className="btn-secondary w-full"
-                >
-                  {importing === "file" ? <><Loader2 className="h-4 w-4 animate-spin" /> Extracting...</> : <>Choose file</>}
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => fileRef.current?.click()}
+                    disabled={importing !== null}
+                    className="btn-secondary flex-1"
+                  >
+                    {importing === "file" ? <><Loader2 className="h-4 w-4 animate-spin" /> Extracting...</> : <>Choose file</>}
+                  </button>
+                  {lastFile && (
+                    <button
+                      type="button"
+                      onClick={retryUpload}
+                      disabled={importing !== null}
+                      title={
+                        extractCache[fileKey(lastFile)]
+                          ? `Reuse cached extract of ${lastFile.name} (${extractCache[fileKey(lastFile)].length.toLocaleString()} chars) — no AI tokens used`
+                          : `Retry uploading ${lastFile.name}`
+                      }
+                      className="btn-secondary shrink-0"
+                    >
+                      <RotateCcw className="h-4 w-4" /> Retry
+                    </button>
+                  )}
+                </div>
+                {lastFile && !importing && (
+                  <p className="mt-2 text-[11px] text-ink/50 dark:text-[#F5EDE7]/50">
+                    {extractCache[fileKey(lastFile)]
+                      ? `♻️ Retry will reuse ${extractCache[fileKey(lastFile)].length.toLocaleString()} cached chars from "${lastFile.name}" — no AI tokens used.`
+                      : `Retry will re-attempt "${lastFile.name}" without re-selecting it.`}
+                  </p>
+                )}
                 {importing === "file" && uploadStatus && (
                   <div className="mt-2 flex items-center gap-2 rounded-xl bg-brand/5 px-3 py-2 text-xs font-medium text-brand animate-pulse">
                     {uploadStatus}
