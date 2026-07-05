@@ -108,11 +108,23 @@ export async function generateQuestions(
   };
 }
 
-export async function createForm(title: string, questions: ParsedQuestion[], expiresAt?: string | null) {
+export async function createForm(
+  title: string,
+  questions: ParsedQuestion[],
+  expiresAt?: string | null
+) {
   return call<{ formId: string; responderUri: string; editUri: string }>("/api/create-form", {
     method: "POST",
     headers: await authHeaders(),
     body: JSON.stringify({ title, questions, expiresAt: expiresAt ?? null }),
+  });
+}
+
+export async function deleteForm(formId: string, googleFormId?: string) {
+  return call<{ ok: true }>("/api/delete-form", {
+    method: "DELETE",
+    headers: await authHeaders(),
+    body: JSON.stringify({ formId, googleFormId }),
   });
 }
 
