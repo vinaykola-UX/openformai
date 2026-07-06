@@ -76,10 +76,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
   try {
     const { uid } = await verifyAuth(req);
-    const { title, questions, mode } = req.body as {
+    const { title, questions, mode, expiresAt } = req.body as {
       title: string;
       questions: QuizQuestion[];
       mode: "quiz" | "form";
+      expiresAt?: string | null;
     };
     if (!title || !Array.isArray(questions) || !questions.length) {
       return res.status(400).json({ error: "Missing title or questions" });
@@ -174,6 +175,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       questionCount: questions.length,
       source: "ai-quiz",
       quizMode: isQuiz,
+      expiresAt: expiresAt ? new Date(expiresAt) : null,
       createdAt: FieldValue.serverTimestamp(),
     });
 

@@ -47,6 +47,7 @@ export default function AIQuiz() {
   const [difficulty, setDifficulty] = useState<string>("Mixed");
   const [qType, setQType] = useState<string>("Mixed");
   const [mode, setMode] = useState<"quiz" | "form">("quiz");
+  const [expiresAt, setExpiresAt] = useState<string>("");
 
   const [questions, setQuestions] = useState<QuizQuestion[] | null>(null);
   const [generating, setGenerating] = useState(false);
@@ -117,7 +118,7 @@ export default function AIQuiz() {
     if (!questions?.length) return;
     setError(""); setCreating(true);
     try {
-      const r = await createQuizForm({ title, questions, mode });
+      const r = await createQuizForm({ title, questions, mode, expiresAt: expiresAt || null });
       setResult(r);
       setStep("result");
     } catch (err: any) {
@@ -196,6 +197,11 @@ export default function AIQuiz() {
                 className="flex-1 truncate bg-transparent text-xs text-ink/80 outline-none dark:text-[#F5EDE7]/80" />
               <CopyLinkButton url={result.responderUri} size="sm" label="Copy" />
             </div>
+            {expiresAt && (
+              <p className="mt-2 text-xs text-ink/60 dark:text-[#F5EDE7]/60">
+                ⏰ Closes on {new Date(expiresAt).toLocaleString()}
+              </p>
+            )}
             <div className="mt-4 flex flex-col gap-3">
               <a href={result.responderUri} target="_blank" rel="noreferrer" className="btn-primary">
                 <ExternalLink className="h-4 w-4" /> Open form
@@ -348,6 +354,19 @@ export default function AIQuiz() {
               <div className="mt-4">
                 <label className="label">Form title</label>
                 <input value={title} onChange={(e) => setTitle(e.target.value)} className="input" />
+              </div>
+              <div className="mt-4">
+                <label className="label">Close responses after (optional)</label>
+                <input
+                  type="datetime-local"
+                  value={expiresAt}
+                  onChange={(e) => setExpiresAt(e.target.value)}
+                  className="input"
+                  min={new Date().toISOString().slice(0, 16)}
+                />
+                <p className="mt-1 text-xs text-ink/60 dark:text-[#F5EDE7]/60">
+                  Leave empty to keep the form open indefinitely.
+                </p>
               </div>
             </div>
 
