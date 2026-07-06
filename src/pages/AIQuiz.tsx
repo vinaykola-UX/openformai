@@ -47,6 +47,7 @@ export default function AIQuiz() {
   const [difficulty, setDifficulty] = useState<string>("Mixed");
   const [qType, setQType] = useState<string>("Mixed");
   const [mode, setMode] = useState<"quiz" | "form">("quiz");
+  const [expiresAt, setExpiresAt] = useState<string>("");
 
   const [questions, setQuestions] = useState<QuizQuestion[] | null>(null);
   const [generating, setGenerating] = useState(false);
