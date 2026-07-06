@@ -22,14 +22,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // ── Verify this form belongs to this user ─────────────────────────────
     const formSnap = await db.collection("forms").doc(formId).get();
-    if (!formSnap.exists()) {
+    if (!formSnap.exists) {
       return res.status(404).json({ error: "Form not found" });
     }
     if (formSnap.data()?.uid !== uid) {
       return res.status(403).json({ error: "Not authorized" });
     }
 
-    // ── Try to delete from Google Forms too ───────────────────────────────
+    // ── Try to delete from Google Forms via Drive API ─────────────────────
     if (googleFormId) {
       try {
         const userSnap = await db.collection("users").doc(uid).get();
@@ -38,17 +38,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const client = oauthClient();
           client.setCredentials({ refresh_token: refreshToken });
           const drive = google.drive({ version: "v3", auth: client });
-          // Google Forms API doesn't have delete — use Drive API instead
           await drive.files.delete({ fileId: googleFormId });
         }
       } catch (gErr: any) {
         // Google delete failed — still delete from Firestore
+        // This is non-fatal — user's dashboard will be clean
         console.warn("[delete-form] Google Forms delete failed:", gErr.message);
       }
     }
 
-    // ── Delete from Firestore
-// ─────────────────────────────────────────────
+    // ── Delete from Firestore ─────────────────────────────────────────────
     await db.collection("forms").doc(formId).delete();
 
     return res.status(200).json({ ok: true });
