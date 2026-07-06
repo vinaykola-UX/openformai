@@ -23,6 +23,8 @@ import {
   Lock,
   BarChart2,
   Trash2,
+  Wand2,
+  Brain,
   Infinity as InfinityIcon,
 } from "lucide-react";
 import Navbar from "../components/Navbar";
@@ -79,7 +81,6 @@ export default function Dashboard() {
   useEffect(() => {
     if (!user) return;
     setLoading(true);
-
     const mapDocs = (snap: any): FormDoc[] => {
       const list: FormDoc[] = snap.docs.map((d: any) => ({
         id: d.id,
@@ -92,21 +93,12 @@ export default function Dashboard() {
       });
       return list;
     };
-
     const baseQ = query(collection(db, "forms"), where("uid", "==", user.uid));
-
     const unsub = onSnapshot(
       baseQ,
-      (snap) => {
-        setForms(mapDocs(snap));
-        setLoading(false);
-      },
-      (err) => {
-        console.error("[dashboard] forms snapshot failed", err);
-        setLoading(false);
-      }
+      (snap) => { setForms(mapDocs(snap)); setLoading(false); },
+      (err) => { console.error("[dashboard] forms snapshot failed", err); setLoading(false); }
     );
-
     return () => unsub();
   }, [user]);
 
@@ -135,146 +127,123 @@ export default function Dashboard() {
   return (
     <div className="flex min-h-screen flex-col bg-cream dark:bg-[#1A0E12]">
       <Navbar />
-
       <main className="flex-1 px-4 py-8 sm:py-12">
-        <div className="mx-auto w-full max-w-6xl">
+        <div className="mx-auto w-full max-w-4xl">
+
+          {/* ── Hero ── */}
           <div className="relative overflow-hidden rounded-3xl bg-brand-gradient p-6 text-white shadow-card sm:p-10">
             <div className="absolute -right-16 -top-16 h-64 w-64 rounded-full bg-peach/30 blur-3xl" />
             <div className="absolute -bottom-20 -left-10 h-56 w-56 rounded-full bg-white/10 blur-3xl" />
-            <div className="relative flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1 text-xs font-semibold uppercase tracking-wider backdrop-blur">
-                  <Sparkles className="h-3.5 w-3.5" /> OpenForm Studio
-                </div>
-                <h1 className="font-display text-2xl font-bold sm:text-4xl">
-                  Welcome back, {firstName}
-                </h1>
-                <p className="mt-2 max-w-xl text-sm text-white/80 sm:text-base">
-                  Paste exam questions, drop a file, or import from Google Drive. We turn them into real Google Forms in seconds.
-                </p>
+            <div className="relative">
+              <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1 text-xs font-semibold uppercase tracking-wider backdrop-blur">
+                <Sparkles className="h-3.5 w-3.5" /> OpenForm Studio
               </div>
-              <div className="flex flex-wrap gap-3">
+              <h1 className="font-display text-2xl font-bold sm:text-3xl">
+                Welcome back, {firstName} 👋
+              </h1>
+              <p className="mt-2 text-sm text-white/80 sm:text-base">
+                Turn any text, PDF, or image into a real Google Form in seconds.
+              </p>
+
+              {/* ── Action cards ── */}
+              <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
                 <Link
                   to="/dashboard/new"
-                  className="inline-flex items-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-semibold text-brand shadow-card transition hover:bg-peach-50 active:scale-[0.98]"
+                  className="flex flex-col items-start gap-2 rounded-2xl bg-white/15 p-4 backdrop-blur transition hover:bg-white/25 active:scale-[0.98]"
                 >
-                  <Plus className="h-4 w-4" /> New form
+                  <div className="grid h-9 w-9 place-items-center rounded-xl bg-white text-brand">
+                    <Wand2 className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold">New Form</p>
+                    <p className="text-xs text-white/70">Paste or upload</p>
+                  </div>
                 </Link>
+
                 <Link
                   to="/ai-quiz"
-                  className="inline-flex items-center gap-2 rounded-2xl border border-white/30 bg-white/10 px-5 py-3 text-sm font-semibold text-white backdrop-blur transition hover:bg-white/20"
+                  className="flex flex-col items-start gap-2 rounded-2xl bg-white/15 p-4 backdrop-blur transition hover:bg-white/25 active:scale-[0.98]"
                 >
-                  <Sparkles className="h-4 w-4" /> AI Quiz
+                  <div className="grid h-9 w-9 place-items-center rounded-xl bg-white text-brand">
+                    <Brain className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold">AI Quiz</p>
+                    <p className="text-xs text-white/70">From study notes</p>
+                  </div>
                 </Link>
+
                 <Link
                   to="/connect-google"
-                  className="inline-flex items-center gap-2 rounded-2xl border border-white/30 bg-white/10 px-5 py-3 text-sm font-semibold text-white backdrop-blur transition hover:bg-white/20"
+                  className="flex flex-col items-start gap-2 rounded-2xl bg-white/15 p-4 backdrop-blur transition hover:bg-white/25 active:scale-[0.98] col-span-2 sm:col-span-1"
                 >
-                  <Link2 className="h-4 w-4" /> Google account
+                  <div className="grid h-9 w-9 place-items-center rounded-xl bg-white text-brand">
+                    <Link2 className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold">Google Account</p>
+                    <p className="text-xs text-white/70">Connect to create forms</p>
+                  </div>
                 </Link>
               </div>
             </div>
           </div>
 
-          <div className="mt-6 grid gap-4 sm:grid-cols-3">
-            <StatCard
-              icon={<FileText className="h-5 w-5" />}
-              label="Forms created"
-              value={loading ? "—" : String(forms.length)}
-            />
-            <StatCard
-              icon={<ListChecks className="h-5 w-5" />}
-              label="Total questions"
-              value={loading ? "—" : String(totalQuestions)}
-            />
-            <StatCard
-              icon={<Clock className="h-5 w-5" />}
-              label="Last activity"
-              value={loading ? "—" : forms[0] ? formatDate(forms[0].createdAt) : "No forms yet"}
-            />
-          </div>
-
-          <div className="card mt-4 flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-3">
-              <div className="grid h-11 w-11 place-items-center rounded-2xl bg-peach/40 text-brand">
-                {unlocked ? <InfinityIcon className="h-5 w-5" /> : <Lock className="h-5 w-5" />}
-              </div>
-              <div className="min-w-0">
-                <div className="text-xs font-semibold uppercase tracking-wide text-ink/60 dark:text-[#F5EDE7]/60">
-                  Plan
-                </div>
-                <div className="font-display text-base font-bold">
-                  {unlocked
-                    ? "Unlimited (unlocked)"
-                    : `Free · ${Math.min(todayCount, DAILY_LIMIT)} / ${DAILY_LIMIT} today`}
-                </div>
-                {!unlocked && (
-                  <div className="mt-2">
-                    <div className="h-1.5 w-32 max-w-full overflow-hidden rounded-full bg-cream dark:bg-white/10">
-                      <div
-                        className="h-full bg-brand transition-all"
-                        style={{ width: `${Math.min(100, (todayCount / DAILY_LIMIT) * 100)}%` }}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
+          {/* ── Stats ── */}
+          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="card flex flex-col gap-1 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-ink/50 dark:text-[#F5EDE7]/50">Forms</p>
+              <p className="font-display text-2xl font-bold">{loading ? "—" : forms.length}</p>
             </div>
-            {!unlocked && (
-              <button onClick={() => setShowUnlock(true)} className="btn-secondary self-start sm:self-auto">
-                <Lock className="h-4 w-4" /> Enter passcode
-              </button>
-            )}
+            <div className="card flex flex-col gap-1 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-ink/50 dark:text-[#F5EDE7]/50">Questions</p>
+              <p className="font-display text-2xl font-bold">{loading ? "—" : totalQuestions}</p>
+            </div>
+            <div className="card flex flex-col gap-1 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-ink/50 dark:text-[#F5EDE7]/50">Last active</p>
+              <p className="font-display text-base font-bold">{loading ? "—" : forms[0] ? formatDate(forms[0].createdAt) : "—"}</p>
+            </div>
+            <div className="card flex flex-col gap-1 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-ink/50 dark:text-[#F5EDE7]/50">Plan</p>
+              <p className="font-display text-base font-bold">
+                {unlocked ? "∞ Unlimited" : `${Math.min(todayCount, DAILY_LIMIT)}/${DAILY_LIMIT} today`}
+              </p>
+              {!unlocked && (
+                <button onClick={() => setShowUnlock(true)} className="mt-1 text-left text-xs font-semibold text-brand hover:underline">
+                  Unlock →
+                </button>
+              )}
+            </div>
           </div>
 
-          <div className="mt-8 grid gap-4 lg:grid-cols-3">
-            <QuickAction
-              to="/dashboard/new"
-              title="Paste questions"
-              description="Drop raw text from any exam — we'll parse the structure."
-              icon={<Sparkles className="h-5 w-5" />}
-            />
-            <QuickAction
-              to="/dashboard/new"
-              title="Upload a file"
-              description="PDF, DOCX, TXT or an image of a worksheet."
-              icon={<FileText className="h-5 w-5" />}
-            />
-            <QuickAction
-              to="/dashboard/new"
-              title="Import from Drive"
-              description="Paste a Google Drive or Docs share link."
-              icon={<Link2 className="h-5 w-5" />}
-            />
-          </div>
-
-          <div className="mt-10">
+          {/* ── Forms list ── */}
+          <div className="mt-8">
             <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="font-display text-xl font-bold">Your forms</h2>
                 <p className="text-sm text-ink/60 dark:text-[#F5EDE7]/60">
-                  Everything you've generated, synced live from Firestore.
+                  {forms.length} form{forms.length !== 1 ? "s" : ""} created
                 </p>
               </div>
-              <div className="relative w-full sm:w-72">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink/40 dark:text-[#F5EDE7]/40" />
+              <div className="relative w-full sm:w-64">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink/40" />
                 <input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search forms"
+                  placeholder="Search forms..."
                   className="input pl-9"
                 />
               </div>
             </div>
 
             {loading ? (
-              <div className="card flex items-center justify-center gap-2 p-12 text-sm text-ink/60 dark:text-[#F5EDE7]/60">
+              <div className="card flex items-center justify-center gap-2 p-12 text-sm text-ink/60">
                 <Loader2 className="h-4 w-4 animate-spin" /> Loading your forms…
               </div>
             ) : filtered.length === 0 ? (
               <EmptyState hasAny={forms.length > 0} />
             ) : (
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-3">
                 {filtered.map((f) => (
                   <FormCard key={f.id} form={f} />
                 ))}
@@ -297,37 +266,11 @@ export default function Dashboard() {
   );
 }
 
-function StatCard({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
-  return (
-    <div className="card flex items-center gap-4 p-5">
-      <div className="grid h-11 w-11 place-items-center rounded-2xl bg-peach/40 text-brand">{icon}</div>
-      <div>
-        <div className="text-xs font-semibold uppercase tracking-wide text-ink/60 dark:text-[#F5EDE7]/60">{label}</div>
-        <div className="font-display text-xl font-bold">{value}</div>
-      </div>
-    </div>
-  );
-}
-
-function QuickAction({ to, title, description, icon }: { to: string; title: string; description: string; icon: React.ReactNode }) {
-  return (
-    <Link to={to} className="card group flex items-start gap-4 p-5 transition hover:-translate-y-0.5 hover:shadow-glow">
-      <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-brand text-white">{icon}</div>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center justify-between">
-          <h3 className="font-display font-bold">{title}</h3>
-          <ChevronRight className="h-4 w-4 text-ink/40 transition group-hover:translate-x-0.5 group-hover:text-brand dark:text-[#F5EDE7]/40" />
-        </div>
-        <p className="mt-1 text-sm text-ink/60 dark:text-[#F5EDE7]/60">{description}</p>
-      </div>
-    </Link>
-  );
-}
-
 function FormCard({ form }: { form: FormDoc }) {
   const nav = useNavigate();
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   async function handleDelete() {
     setDeleting(true);
@@ -341,65 +284,89 @@ function FormCard({ form }: { form: FormDoc }) {
     }
   }
 
+  const isExpired = form.expiresAt
+    ? (form.expiresAt.toDate ? form.expiresAt.toDate() : new Date(form.expiresAt)) < new Date()
+    : false;
+
   return (
-    <div className="card group flex flex-col gap-4 p-5 transition hover:-translate-y-0.5 hover:shadow-glow">
+    <div className="card p-4 transition hover:shadow-glow">
+      {/* Top row */}
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h3 className="truncate font-display text-base font-bold">{form.title}</h3>
-          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink/60 dark:text-[#F5EDE7]/60">
-            <span className="chip"><ListChecks className="h-3 w-3" /> {form.questionCount} questions</span>
-            <span className="inline-flex items-center gap-1"><Clock className="h-3 w-3" /> {formatDate(form.createdAt)}</span>
-            {form.expiresAt && (() => {
-              const exp = form.expiresAt.toDate ? form.expiresAt.toDate() : new Date(form.expiresAt);
-              const expired = exp < new Date();
-              const dateStr = exp.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
-              return (
-                <span className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold ${
-                  expired
-                    ? "bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300"
-                    : "bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-200"
-                }`}>
-                  {expired ? "🔴 Closed" : `⏰ Closes ${dateStr}`}
-                </span>
-              );
-            })()}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <h3 className="truncate font-display text-base font-bold text-ink dark:text-[#F5EDE7]">
+              {form.title}
+            </h3>
+            {isExpired && (
+              <span className="shrink-0 rounded-full bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-600 dark:bg-red-950/30 dark:text-red-300">
+                🔴 Closed
+              </span>
+            )}
+            {!isExpired && form.expiresAt && (
+              <span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-600 dark:bg-amber-950/30 dark:text-amber-300">
+                ⏰ Expires
+              </span>
+            )}
+          </div>
+          <div className="mt-1 flex items-center gap-3 text-xs text-ink/50 dark:text-[#F5EDE7]/50">
+            <span className="flex items-center gap-1">
+              <ListChecks className="h-3 w-3" /> {form.questionCount} questions
+            </span>
+            <span className="flex items-center gap-1">
+              <Clock className="h-3 w-3" /> {formatDate(form.createdAt)}
+            </span>
           </div>
         </div>
-        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-peach/40 text-brand">
-          <FileText className="h-5 w-5" />
-        </div>
-      </div>
 
-      <div className="flex flex-wrap gap-2">
-        <a href={form.responderUri} target="_blank" rel="noreferrer" className="btn-primary !py-2 !px-3 text-xs">
+        {/* Primary action */}
+        <a
+          href={form.responderUri}
+          target="_blank"
+          rel="noreferrer"
+          className="shrink-0 inline-flex items-center gap-1.5 rounded-xl bg-brand px-3 py-2 text-xs font-semibold text-white transition hover:bg-brand/90"
+        >
           <ExternalLink className="h-3.5 w-3.5" /> Open
         </a>
-        <a href={form.editUri} target="_blank" rel="noreferrer" className="btn-secondary !py-2 !px-3 text-xs">
+      </div>
+
+      {/* Bottom row — secondary actions */}
+      <div className="mt-3 flex items-center gap-2 border-t border-brand/5 pt-3 dark:border-white/5">
+        <a
+          href={form.editUri}
+          target="_blank"
+          rel="noreferrer"
+          className="flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-ink/60 hover:bg-brand/5 hover:text-brand dark:text-[#F5EDE7]/60 transition"
+        >
           <Pencil className="h-3.5 w-3.5" /> Edit
         </a>
-        <CopyLinkButton url={form.responderUri} size="sm" label="Copy link" />
+
+        <CopyLinkButton url={form.responderUri} size="sm" label="Copy" />
+
         <button
           onClick={() => nav(`/dashboard/analytics/${form.id}`)}
-          className="btn-ghost !py-2 !px-3 text-xs"
+          className="flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-ink/60 hover:bg-brand/5 hover:text-brand dark:text-[#F5EDE7]/60 transition"
         >
           <BarChart2 className="h-3.5 w-3.5" /> Analytics
         </button>
+
+        <div className="flex-1" />
+
         <button
           onClick={() => setConfirmDelete(true)}
-          className="btn-ghost !py-2 !px-3 text-xs text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30"
+          className="flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-red-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/30 transition"
         >
-          <Trash2 className="h-3.5 w-3.5" /> Delete
+          <Trash2 className="h-3.5 w-3.5" />
         </button>
       </div>
 
       {/* Confirm delete */}
       {confirmDelete && (
-        <div className="rounded-2xl border border-red-200 bg-red-50 p-4 dark:border-red-500/30 dark:bg-red-950/30">
+        <div className="mt-3 rounded-2xl border border-red-200 bg-red-50 p-4 dark:border-red-500/30 dark:bg-red-950/30">
           <p className="text-sm font-semibold text-red-700 dark:text-red-300">
             Delete "{form.title}"?
           </p>
           <p className="mt-1 text-xs text-red-600/80 dark:text-red-400/80">
-            This removes it from OpenForm and Google Forms permanently.
+            Removes from OpenForm and Google Forms permanently.
           </p>
           <div className="mt-3 flex gap-2">
             <button
@@ -428,9 +395,13 @@ function EmptyState({ hasAny }: { hasAny: boolean }) {
       <div className="grid h-14 w-14 place-items-center rounded-2xl bg-peach/40 text-brand">
         <Sparkles className="h-7 w-7" />
       </div>
-      <h3 className="font-display text-lg font-bold">{hasAny ? "No matches" : "No forms yet"}</h3>
+      <h3 className="font-display text-lg font-bold">
+        {hasAny ? "No matches" : "No forms yet"}
+      </h3>
       <p className="max-w-sm text-sm text-ink/60 dark:text-[#F5EDE7]/60">
-        {hasAny ? "Try a different search term." : "Create your first Google Form from pasted text, an uploaded file, or a Drive link."}
+        {hasAny
+          ? "Try a different search term."
+          : "Create your first Google Form from pasted text, an uploaded file, or a Drive link."}
       </p>
       {!hasAny && (
         <Link to="/dashboard/new" className="btn-primary mt-2">
