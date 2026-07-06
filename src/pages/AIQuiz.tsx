@@ -197,6 +197,11 @@ export default function AIQuiz() {
                 className="flex-1 truncate bg-transparent text-xs text-ink/80 outline-none dark:text-[#F5EDE7]/80" />
               <CopyLinkButton url={result.responderUri} size="sm" label="Copy" />
             </div>
+            {expiresAt && (
+              <p className="mt-2 text-xs text-ink/60 dark:text-[#F5EDE7]/60">
+                ⏰ Closes on {new Date(expiresAt).toLocaleString()}
+              </p>
+            )}
             <div className="mt-4 flex flex-col gap-3">
               <a href={result.responderUri} target="_blank" rel="noreferrer" className="btn-primary">
                 <ExternalLink className="h-4 w-4" /> Open form
