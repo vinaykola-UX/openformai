@@ -350,6 +350,19 @@ export default function AIQuiz() {
                 <label className="label">Form title</label>
                 <input value={title} onChange={(e) => setTitle(e.target.value)} className="input" />
               </div>
+              <div className="mt-4">
+                <label className="label">Close responses after (optional)</label>
+                <input
+                  type="datetime-local"
+                  value={expiresAt}
+                  onChange={(e) => setExpiresAt(e.target.value)}
+                  className="input"
+                  min={new Date().toISOString().slice(0, 16)}
+                />
+                <p className="mt-1 text-xs text-ink/60 dark:text-[#F5EDE7]/60">
+                  Leave empty to keep the form open indefinitely.
+                </p>
+              </div>
             </div>
 
             <div className="mt-6 space-y-3">
