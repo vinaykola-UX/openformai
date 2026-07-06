@@ -118,7 +118,7 @@ export default function AIQuiz() {
     if (!questions?.length) return;
     setError(""); setCreating(true);
     try {
-      const r = await createQuizForm({ title, questions, mode });
+      const r = await createQuizForm({ title, questions, mode, expiresAt: expiresAt || null });
       setResult(r);
       setStep("result");
     } catch (err: any) {
