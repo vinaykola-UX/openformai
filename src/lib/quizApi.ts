@@ -65,4 +65,5 @@ export const createQuizForm = (opts: {
   title: string;
   questions: QuizQuestion[];
   mode: "quiz" | "form";
+  expiresAt?: string | null;
 }) => call<{ formId: string; responderUri: string; editUri: string }>("/api/quiz/create-form", opts);
