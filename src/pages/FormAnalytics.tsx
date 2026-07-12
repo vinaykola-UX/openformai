@@ -105,7 +105,103 @@ export default function FormAnalytics() {
       setError(err.message || "Something went wrong.");
     } finally {
       setLoading(false);
+  }
+
+  async function buildPDF(): Promise<Blob | null> {
+    if (!analytics) return null;
+    const { jsPDF } = await import("jspdf");
+    const autoTable = (await import("jspdf-autotable")).default;
+    const doc = new jsPDF({ unit: "pt", format: "a4" });
+    const brand: [number, number, number] = [116, 26, 47];
+
+    // Header
+    doc.setFillColor(...brand);
+    doc.rect(0, 0, 595, 60, "F");
+    doc.setTextColor(255);
+    doc.setFontSize(18);
+    doc.text("OpenForm — Analytics Report", 40, 38);
+
+    doc.setTextColor(43, 43, 43);
+    doc.setFontSize(14);
+    doc.text(formTitle || "Untitled form", 40, 88);
+    doc.setFontSize(9);
+    doc.setTextColor(120);
+    doc.text(`Generated ${new Date().toLocaleString()}`, 40, 104);
+
+    // Summary cards
+    autoTable(doc, {
+      startY: 120,
+      head: [["Total responses", "Avg completion", "Most skipped"]],
+      body: [[
+        String(analytics.totalResponses),
+        `${analytics.avgCompletionRate}%`,
+        analytics.mostSkipped ? analytics.mostSkipped.title : "None",
+      ]],
+      styles: { fontSize: 10, cellPadding: 10, halign: "center" },
+      headStyles: { fillColor: brand, textColor: 255 },
+    });
+
+    // Per-question breakdown
+    if (analytics.questionStats.length > 0) {
+      autoTable(doc, {
+        startY: (doc as any).lastAutoTable.finalY + 24,
+        head: [["#", "Question", "Answered", "Skipped", "Response rate"]],
+        body: analytics.questionStats.map((q, i) => [
+          i + 1, q.title, q.answerCount, q.skippedCount, `${q.responseRate}%`,
+        ]),
+        styles: { fontSize: 9, cellPadding: 6, overflow: "linebreak", valign: "top" },
+        headStyles: { fillColor: brand, textColor: 255 },
+        columnStyles: {
+          0: { cellWidth: 24, halign: "center" },
+          1: { cellWidth: 260 },
+          2: { cellWidth: 60, halign: "center" },
+          3: { cellWidth: 60, halign: "center" },
+          4: { cellWidth: 80, halign: "center" },
+        },
+      });
     }
+
+    // Footer
+    const pages = (doc as any).internal.getNumberOfPages();
+    for (let i = 1; i <= pages; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setTextColor(150);
+      doc.text(`OpenForm · openformai.vercel.app · Page ${i} of ${pages}`, 40, 820);
+    }
+    return doc.output("blob");
+  }
+
+  async function downloadPDF() {
+    const blob = await buildPDF();
+    if (!blob) return;
+    const safe = (formTitle || "analytics").replace(/[^\w-]+/g, "_");
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `${safe}_analytics.pdf`; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function sharePDF() {
+    const blob = await buildPDF();
+    if (!blob) return;
+    const safe = (formTitle || "analytics").replace(/[^\w-]+/g, "_");
+    const file = new File([blob], `${safe}_analytics.pdf`, { type: "application/pdf" });
+    const nav: any = window.navigator;
+    if (nav.canShare && nav.canShare({ files: [file] })) {
+      try {
+        await nav.share({ files: [file], title: `${formTitle} — Analytics`, text: "OpenForm analytics report" });
+        return;
+      } catch { /* user cancelled */ }
+    }
+    // Fallback: download it
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `${safe}_analytics.pdf`; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+
   }
 
   return (
