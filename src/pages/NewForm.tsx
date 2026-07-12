@@ -586,8 +586,9 @@ export default function NewForm() {
                   className="btn-secondary"
                   title="Share these questions with anyone — no login needed"
                 >
-                  🔗 Share preview link
+                  {copiedPreview ? "✓ Link copied!" : "🔗 Share preview link"}
                 </button>
+
                 <button
                   onClick={publish}
                   disabled={creating}
