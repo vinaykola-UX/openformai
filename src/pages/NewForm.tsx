@@ -559,6 +559,14 @@ export default function NewForm() {
                   {editMode ? "Preview" : "✏ Edit questions"}
                 </button>
                 <button
+                  type="button"
+                  onClick={copyDraftPreviewLink}
+                  className="btn-secondary"
+                  title="Share these questions with anyone — no login needed"
+                >
+                  🔗 Share preview link
+                </button>
+                <button
                   onClick={publish}
                   disabled={creating}
                   className="btn-primary"
@@ -566,6 +574,7 @@ export default function NewForm() {
                   {creating ? "Creating Google Form..." : "Create Google Form"}
                 </button>
               </div>
+
             </div>
 
             {meta && meta.warnings.length > 0 && (
