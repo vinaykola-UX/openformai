@@ -105,7 +105,10 @@ export default function FormAnalytics() {
       setError(err.message || "Something went wrong.");
     } finally {
       setLoading(false);
+    }
   }
+
+
 
   async function buildPDF(): Promise<Blob | null> {
     if (!analytics) return null;
