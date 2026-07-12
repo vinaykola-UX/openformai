@@ -253,7 +253,29 @@ export default function NewForm() {
       setCreating(false);
     }
   }
+
+  const [copiedPreview, setCopiedPreview] = useState(false);
+
+  function copyDraftPreviewLink() {
+    if (!questions) return;
+    const payload = JSON.stringify({ title, questions });
+    // URL-safe base64 (handles unicode)
+    const b64 = btoa(unescape(encodeURIComponent(payload)))
+      .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    const url = `${window.location.origin}/preview/draft#d=${b64}`;
+    navigator.clipboard.writeText(url).then(
+      () => {
+        setCopiedPreview(true);
+        setTimeout(() => setCopiedPreview(false), 2500);
+      },
+      () => {
+        window.prompt("Copy this preview link:", url);
+      }
+    );
+  }
+
  // ── Success screen ──
+
   if (result) {
     const previewUrl = `${window.location.origin}/preview/${result.formId}`;
     return (
