@@ -278,14 +278,21 @@ export default function FormAnalytics() {
                 </div>
               )}
 
-            {/* Refresh button */}
-            <div className="flex justify-center">
+            {/* Actions */}
+            <div className="flex flex-wrap justify-center gap-2">
               <button onClick={loadAnalytics} className="btn-secondary">
-                🔄 Refresh analytics
+                🔄 Refresh
+              </button>
+              <button onClick={downloadPDF} className="btn-secondary">
+                <Download className="h-4 w-4" /> Download PDF report
+              </button>
+              <button onClick={sharePDF} className="btn-primary">
+                <Share2 className="h-4 w-4" /> Share report
               </button>
             </div>
           </div>
         )}
+
       </main>
     </div>
   );
