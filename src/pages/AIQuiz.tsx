@@ -517,7 +517,7 @@ function PillGroup<T extends string>({
   );
 }
 
-function ExportMenu({ onExport }: { onExport: (f: "json" | "txt" | "md" | "csv") => void }) {
+function ExportMenu({ onExport }: { onExport: (f: "json" | "txt" | "md" | "csv" | "pdf" | "xlsx") => void }) {
   const [open, setOpen] = useState(false);
   return (
     <div className="relative">
@@ -525,11 +525,18 @@ function ExportMenu({ onExport }: { onExport: (f: "json" | "txt" | "md" | "csv")
         <Download className="h-4 w-4" /> Export <ChevronDown className="h-3 w-3" />
       </button>
       {open && (
-        <div className="absolute right-0 z-10 mt-1 w-32 rounded-xl border border-brand/10 bg-white shadow-glow dark:bg-[#241218] dark:border-white/10">
-          {(["json", "txt", "md", "csv"] as const).map((f) => (
+        <div className="absolute right-0 z-10 mt-1 w-40 rounded-xl border border-brand/10 bg-white shadow-glow dark:bg-[#241218] dark:border-white/10">
+          {([
+            ["pdf", "PDF"],
+            ["xlsx", "Excel (editable)"],
+            ["csv", "CSV"],
+            ["json", "JSON"],
+            ["txt", "TXT"],
+            ["md", "Markdown"],
+          ] as const).map(([f, label]) => (
             <button key={f} onClick={() => { onExport(f); setOpen(false); }}
-              className="block w-full px-3 py-2 text-left text-xs font-semibold uppercase text-ink hover:bg-peach/30 dark:text-[#F5EDE7]">
-              {f}
+              className="block w-full px-3 py-2 text-left text-xs font-semibold text-ink hover:bg-peach/30 dark:text-[#F5EDE7]">
+              {label}
             </button>
           ))}
         </div>
@@ -537,6 +544,7 @@ function ExportMenu({ onExport }: { onExport: (f: "json" | "txt" | "md" | "csv")
     </div>
   );
 }
+
 
 function QuizCard({
   q, index, total, onChange, onDelete, onDuplicate, onMoveUp, onMoveDown,
