@@ -205,7 +205,6 @@ export default function FormAnalytics() {
   }
 
 
-  }
 
   return (
     <div className="flex min-h-screen flex-col bg-cream dark:bg-[#1A0E12]">
