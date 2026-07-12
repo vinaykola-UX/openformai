@@ -253,7 +253,29 @@ export default function NewForm() {
       setCreating(false);
     }
   }
+
+  const [copiedPreview, setCopiedPreview] = useState(false);
+
+  function copyDraftPreviewLink() {
+    if (!questions) return;
+    const payload = JSON.stringify({ title, questions });
+    // URL-safe base64 (handles unicode)
+    const b64 = btoa(unescape(encodeURIComponent(payload)))
+      .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    const url = `${window.location.origin}/preview/draft#d=${b64}`;
+    navigator.clipboard.writeText(url).then(
+      () => {
+        setCopiedPreview(true);
+        setTimeout(() => setCopiedPreview(false), 2500);
+      },
+      () => {
+        window.prompt("Copy this preview link:", url);
+      }
+    );
+  }
+
  // ── Success screen ──
+
   if (result) {
     const previewUrl = `${window.location.origin}/preview/${result.formId}`;
     return (
@@ -559,6 +581,15 @@ export default function NewForm() {
                   {editMode ? "Preview" : "✏ Edit questions"}
                 </button>
                 <button
+                  type="button"
+                  onClick={copyDraftPreviewLink}
+                  className="btn-secondary"
+                  title="Share these questions with anyone — no login needed"
+                >
+                  {copiedPreview ? "✓ Link copied!" : "🔗 Share preview link"}
+                </button>
+
+                <button
                   onClick={publish}
                   disabled={creating}
                   className="btn-primary"
@@ -566,6 +597,7 @@ export default function NewForm() {
                   {creating ? "Creating Google Form..." : "Create Google Form"}
                 </button>
               </div>
+
             </div>
 
             {meta && meta.warnings.length > 0 && (

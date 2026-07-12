@@ -44,9 +44,38 @@ export default function FormPreview() {
     loadForm();
   }, [formId]);
 
+  function tryLoadDraftFromHash(): FormData | null {
+    try {
+      const hash = window.location.hash.replace(/^#/, "");
+      const params = new URLSearchParams(hash);
+      const d = params.get("d");
+      if (!d) return null;
+      const json = decodeURIComponent(escape(atob(d.replace(/-/g, "+").replace(/_/g, "/"))));
+      const parsed = JSON.parse(json);
+      return {
+        title: parsed.title || "Untitled draft",
+        questionCount: parsed.questions?.length || 0,
+        questions: parsed.questions || [],
+      };
+    } catch {
+      return null;
+    }
+  }
+
   async function loadForm() {
     setLoading(true);
     setError("");
+    // Draft mode: data encoded in URL hash — no Firestore lookup
+    if (formId === "draft") {
+      const draft = tryLoadDraftFromHash();
+      if (!draft) {
+        setError("This draft preview link is invalid or incomplete.");
+      } else {
+        setForm(draft);
+      }
+      setLoading(false);
+      return;
+    }
     try {
       const snap = await getDoc(doc(db, "forms", formId!));
       if (!snap.exists()) {
@@ -61,6 +90,7 @@ export default function FormPreview() {
       setLoading(false);
     }
   }
+
 
   return (
     <div className="flex min-h-screen flex-col bg-cream dark:bg-[#1A0E12]">
