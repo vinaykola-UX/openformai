@@ -10,11 +10,14 @@ import {
   CheckCircle2,
   XCircle,
   ListChecks,
+  Download,
+  Share2,
 } from "lucide-react";
 import Navbar from "../components/Navbar";
 import { useAuth } from "../contexts/AuthContext";
 import { db } from "../lib/firebase";
 import { auth, waitForAuthReady } from "../lib/firebase";
+
 
 type QuestionStat = {
   questionId: string;
