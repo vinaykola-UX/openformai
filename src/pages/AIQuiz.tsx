@@ -148,7 +148,7 @@ export default function AIQuiz() {
     URL.revokeObjectURL(url);
   }
 
-  function exportQuiz(format: "json" | "txt" | "md" | "csv") {
+  async function exportQuiz(format: "json" | "txt" | "md" | "csv" | "pdf" | "xlsx") {
     if (!questions) return;
     const safe = title.replace(/[^\w-]+/g, "_");
     if (format === "json") {
@@ -169,7 +169,7 @@ export default function AIQuiz() {
         return `### ${i + 1}. ${q.title}${opts}${ans}${exp}`;
       }).join("\n\n");
       downloadFile(`${safe}.md`, `# ${title}\n\n${body}`, "text/markdown");
-    } else {
+    } else if (format === "csv") {
       const rows = [["#", "Type", "Question", "Options", "Answer", "Points", "Explanation"]];
       questions.forEach((q, i) => rows.push([
         String(i + 1), q.type, q.title,
@@ -180,8 +180,53 @@ export default function AIQuiz() {
       ]));
       const csv = rows.map((r) => r.map((c) => `"${(c || "").replace(/"/g, '""')}"`).join(",")).join("\n");
       downloadFile(`${safe}.csv`, csv, "text/csv");
+    } else if (format === "xlsx") {
+      const XLSX = await import("xlsx");
+      const header = ["#", "Type", "Question", "Option A", "Option B", "Option C", "Option D", "Option E", "Option F", "Answer", "Points", "Difficulty", "Explanation"];
+      const data = questions.map((q, i) => {
+        const opts = q.options || [];
+        return [
+          i + 1, q.type, q.title,
+          opts[0] || "", opts[1] || "", opts[2] || "", opts[3] || "", opts[4] || "", opts[5] || "",
+          (q.correctAnswers || []).join(" | "),
+          q.points ?? 1,
+          q.difficulty || "",
+          q.explanation || "",
+        ];
+      });
+      const ws = XLSX.utils.aoa_to_sheet([header, ...data]);
+      ws["!cols"] = [{ wch: 4 }, { wch: 10 }, { wch: 50 }, { wch: 20 }, { wch: 20 }, { wch: 20 }, { wch: 20 }, { wch: 20 }, { wch: 20 }, { wch: 20 }, { wch: 8 }, { wch: 10 }, { wch: 40 }];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Questions");
+      XLSX.writeFile(wb, `${safe}.xlsx`);
+    } else if (format === "pdf") {
+      const { jsPDF } = await import("jspdf");
+      const autoTable = (await import("jspdf-autotable")).default;
+      const doc = new jsPDF({ unit: "pt", format: "a4" });
+      doc.setFontSize(18);
+      doc.text(title, 40, 50);
+      doc.setFontSize(10);
+      doc.setTextColor(120);
+      doc.text(`${questions.length} questions • ${mode === "quiz" ? "Quiz" : "Form"}`, 40, 68);
+      const body = questions.map((q, i) => {
+        const opts = q.options?.length
+          ? q.options.map((o, j) => `${String.fromCharCode(65 + j)}) ${o}`).join("\n")
+          : "—";
+        const ans = q.correctAnswers?.length ? q.correctAnswers.join(", ") : "—";
+        return [String(i + 1), q.title, opts, ans, q.explanation || ""];
+      });
+      autoTable(doc, {
+        startY: 84,
+        head: [["#", "Question", "Options", "Answer", "Explanation"]],
+        body,
+        styles: { fontSize: 9, cellPadding: 6, valign: "top", overflow: "linebreak" },
+        headStyles: { fillColor: [116, 26, 47], textColor: 255 },
+        columnStyles: { 0: { cellWidth: 24 }, 1: { cellWidth: 150 }, 2: { cellWidth: 160 }, 3: { cellWidth: 70 }, 4: { cellWidth: 110 } },
+      });
+      doc.save(`${safe}.pdf`);
     }
   }
+
 
   // ─── Result screen ─────────────────────────────────────────────
   if (step === "result" && result) {
