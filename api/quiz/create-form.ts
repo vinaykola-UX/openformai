@@ -173,8 +173,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       responderUri,
       editUri,
       questionCount: questions.length,
+      questions,
       source: "ai-quiz",
       quizMode: isQuiz,
+      isQuiz,
       expiresAt: expiresAt ? new Date(expiresAt) : null,
       createdAt: FieldValue.serverTimestamp(),
     });
