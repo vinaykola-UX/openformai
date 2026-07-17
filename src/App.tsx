@@ -7,6 +7,7 @@ import NewForm from "./pages/NewForm";
 import ConnectGoogle from "./pages/ConnectGoogle";
 import GoogleCallback from "./pages/GoogleCallback";
 import AIQuiz from "./pages/AIQuiz";
+import QuizAutomation from "./pages/QuizAutomation";
 import Privacy from "./pages/Privacy";
 import Terms from "./pages/Terms";
 import NotFound from "./pages/NotFound";
@@ -33,6 +34,14 @@ export default function App() {
         element={
           <ProtectedRoute>
             <AIQuiz />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/automate"
+        element={
+          <ProtectedRoute>
+            <QuizAutomation />
           </ProtectedRoute>
         }
       />
