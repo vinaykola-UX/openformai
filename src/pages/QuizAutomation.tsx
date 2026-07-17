@@ -217,7 +217,7 @@ export default function QuizAutomation() {
           </div>
         </div>
 
-        {error && <ErrorCard message={error} className="mb-4" />}
+        {error && <ErrorCard error={error} className="mb-4" />}
 
         {stage === "input" && (
           <div className="space-y-5">
