@@ -8,7 +8,7 @@ type PlannedUnit = { unitTitle: string; subtopics: PlannedSubtopic[] };
 
 const MAX_UNITS = 20;
 const MAX_SUBTOPICS_PER_UNIT = 10;
-const MAX_SLICE_CHARS = 40000; // matches quiz generation's own text clip
+const MAX_SLICE_CHARS = 40000;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
@@ -46,8 +46,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: "No valid unit/subtopic content to save." });
     }
 
-    // Firestore batch writes cap at 500 ops. Worst case here:
-    // 1 (draft) + 20 (units) + 200 (subtopics) = 221 — safely under the limit.
     const { db } = getAdmin();
     const draftRef = db.collection("quiz_drafts").doc();
     const batch = db.batch();
@@ -58,7 +56,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       uid,
       subjectTitle,
       sourceMode: sourceMode === "multi-file" ? "multi-file" : "single-file",
-      status: "generating", // generating | ready | error
+      status: "generating",
       unitCount: clippedUnits.length,
       subtopicCount,
       doneCount: 0,
@@ -80,7 +78,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           order: si,
           textSlice: s.textSlice,
           questions: [],
-          status: "pending", // pending | generating | done | error
+          status: "pending",
           error: null,
         });
         responseSubtopics.push({ subtopicId: subtopicRef.id, subtopicTitle: s.subtopicTitle });
