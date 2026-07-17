@@ -4,7 +4,14 @@ import { ArrowLeft, Upload, Loader2, FileText, X, CheckCircle2, AlertCircle, Spa
 import Navbar from "../components/Navbar";
 import ErrorCard from "../components/ErrorCard";
 import { extractFileText } from "../lib/api";
-import { planUnits, createDraft, draftGenerate, type PlannedUnit } from "../lib/quizApi";
+import {
+  planUnits,
+  createDraft,
+  draftGenerate,
+  type PlannedUnit,
+  type DraftUnitRef,
+  type DraftSubtopicRef,
+} from "../lib/quizApi";
 
 type UploadMode = "multi-file" | "single-file";
 
@@ -89,7 +96,6 @@ export default function QuizAutomation() {
     setError("");
 
     try {
-      // ── Stage 1: extract text from every uploaded file ──────────────────
       setStage("extracting");
       const extracted: { unitTitle: string; text: string }[] = [];
       for (let i = 0; i < entries.length; i++) {
@@ -98,7 +104,6 @@ export default function QuizAutomation() {
         extracted.push({ unitTitle: entries[i].unitTitle, text });
       }
 
-      // ── Stage 2: plan structure ──────────────────────────────────────────
       setStage("planning");
       let plannedUnits: PlannedUnit[] = [];
 
@@ -108,7 +113,6 @@ export default function QuizAutomation() {
         const result = await planUnits({ text: combined, mode: "whole-subject" });
         plannedUnits = result.units || [];
       } else {
-        // multi-file: each file is already one unit
         for (let i = 0; i < extracted.length; i++) {
           const { unitTitle, text } = extracted[i];
           if (autoSplitSubtopics) {
@@ -127,13 +131,12 @@ export default function QuizAutomation() {
         return;
       }
 
-      // ── Stage 3: create the draft skeleton ───────────────────────────────
       setStageMsg("Saving draft...");
       const created = await createDraft({ subjectTitle, sourceMode: mode, units: plannedUnits });
       setDraftId(created.draftId);
 
-      const flatProgress: SubtopicProgress[] = created.units.flatMap((u) =>
-        u.subtopics.map((s) => ({
+      const flatProgress: SubtopicProgress[] = created.units.flatMap((u: DraftUnitRef) =>
+        u.subtopics.map((s: DraftSubtopicRef) => ({
           unitId: u.unitId,
           unitTitle: u.unitTitle,
           subtopicId: s.subtopicId,
@@ -143,7 +146,6 @@ export default function QuizAutomation() {
       );
       setProgress(flatProgress);
 
-      // ── Stage 4: generate questions, one subtopic at a time ─────────────
       setStage("generating");
       for (let i = 0; i < flatProgress.length; i++) {
         const item = flatProgress[i];
