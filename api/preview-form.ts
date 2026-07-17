@@ -20,12 +20,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const data = snap.data()!;
+    const isQuiz = !!(data.isQuiz ?? data.quizMode ?? false);
+    const rawQuestions = Array.isArray(data.questions) ? data.questions : [];
+
+    // For quizzes, strip answer-revealing fields from this PUBLIC, unauthenticated
+    // endpoint — no matter when it's viewed, before or after the quiz is taken,
+    // the answer key is never sent here.
+    const questions = rawQuestions.map((q: any) => {
+      if (!isQuiz) return q;
+      const { correctAnswer, correctAnswers, explanation, ...safe } = q;
+      return safe;
+    });
 
     // Only expose safe preview fields — never expose uid, tokens, etc.
     return res.status(200).json({
       title: data.title || "Untitled form",
       questionCount: data.questionCount || 0,
-      questions: data.questions || [],
+      questions,
+      isQuiz,
       createdAt: data.createdAt?.toDate?.()?.toISOString?.() || null,
     });
   } catch (err: any) {
