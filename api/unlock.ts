@@ -3,11 +3,16 @@ import { FieldValue } from "firebase-admin/firestore";
 import { verifyAuth } from "./_lib/verify-auth.js";
 import { getAdmin } from "./_lib/firebase-admin.js";
 
-const PASSCODE = process.env.UNLOCK_PASSCODE || "openform@vinay.com";
-
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
   try {
+    const PASSCODE = process.env.UNLOCK_PASSCODE;
+    if (!PASSCODE) {
+      // Fail loudly server-side instead of falling back to a hardcoded secret.
+      console.error("[unlock] UNLOCK_PASSCODE env var is not set");
+      return res.status(500).json({ error: "Unlock is not configured. Contact support." });
+    }
+
     const { uid } = await verifyAuth(req);
     const { passcode } = (req.body || {}) as { passcode?: string };
     if (!passcode || typeof passcode !== "string") {
