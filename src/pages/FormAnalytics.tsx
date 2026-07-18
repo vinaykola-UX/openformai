@@ -13,7 +13,7 @@ import {
   Download,
   Share2,
 } from "lucide-react";
-import Navbar from "../components/Navbar";
+import AppShell from "../components/AppShell";
 import { useAuth } from "../contexts/AuthContext";
 import { db } from "../lib/firebase";
 import { auth, waitForAuthReady } from "../lib/firebase";
@@ -207,9 +207,7 @@ export default function FormAnalytics() {
 
 
   return (
-    <div className="flex min-h-screen flex-col bg-cream dark:bg-[#1A0E12]">
-      <Navbar />
-
+    <AppShell>
       <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-10 sm:px-6">
         {/* Back button */}
         <Link to="/dashboard" className="btn-ghost mb-6 -ml-2">
@@ -392,6 +390,6 @@ export default function FormAnalytics() {
         )}
 
       </main>
-    </div>
+    </AppShell>
   );
 }
