@@ -29,7 +29,7 @@ import {
   Layers,
   Infinity as InfinityIcon,
 } from "lucide-react";
-import Navbar from "../components/Navbar";
+import AppShell from "../components/AppShell";
 import CopyLinkButton from "../components/CopyLinkButton";
 import Footer from "../components/Footer";
 import UnlockDialog from "../components/UnlockDialog";
@@ -166,117 +166,118 @@ export default function Dashboard() {
   const firstName = (user?.displayName || user?.email || "there").split(/[\s@]/)[0];
 
   return (
-    <div className="flex min-h-screen flex-col bg-cream dark:bg-[#1A0E12]">
-      <Navbar />
-      <main className="flex-1 px-4 py-8 sm:py-12">
-        <div className="mx-auto w-full max-w-4xl">
+    <AppShell>
+      <div className="flex min-h-screen flex-col">
+        <main className="flex-1 px-4 py-8 sm:py-12">
+          <div className="mx-auto w-full max-w-4xl">
 
-          {/* ── Hero ── */}
-          <div className="relative overflow-hidden rounded-3xl bg-brand-gradient p-6 text-white shadow-card sm:p-10">
-            <div className="absolute -right-16 -top-16 h-64 w-64 rounded-full bg-peach/30 blur-3xl" />
-            <div className="absolute -bottom-20 -left-10 h-56 w-56 rounded-full bg-white/10 blur-3xl" />
-            <div className="relative">
-              <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1 text-xs font-semibold uppercase tracking-wider backdrop-blur">
-                <Sparkles className="h-3.5 w-3.5" /> OpenForm Studio
+            {/* ── Hero ── */}
+            <div className="relative overflow-hidden rounded-3xl bg-brand-gradient p-6 text-white shadow-card sm:p-10">
+              <div className="absolute -right-16 -top-16 h-64 w-64 rounded-full bg-peach/30 blur-3xl" />
+              <div className="absolute -bottom-20 -left-10 h-56 w-56 rounded-full bg-white/10 blur-3xl" />
+              <div className="relative">
+                <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1 text-xs font-semibold uppercase tracking-wider backdrop-blur">
+                  <Sparkles className="h-3.5 w-3.5" /> OpenForm Studio
+                </div>
+                <h1 className="font-display text-2xl font-bold sm:text-3xl">
+                  Welcome back, {firstName} 👋
+                </h1>
+                <p className="mt-2 text-sm text-white/80 sm:text-base">
+                  Turn any text, PDF, or image into a real Google Form in seconds.
+                </p>
               </div>
-              <h1 className="font-display text-2xl font-bold sm:text-3xl">
-                Welcome back, {firstName} 👋
-              </h1>
-              <p className="mt-2 text-sm text-white/80 sm:text-base">
-                Turn any text, PDF, or image into a real Google Form in seconds.
-              </p>
             </div>
-          </div>
 
-          {/* ── Quick actions ── */}
-          <div className="relative -mt-6 px-1 sm:-mt-8">
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              {QUICK_ACTIONS.map((action) => (
-                <Link
-                  key={action.to}
-                  to={action.to}
-                  className="group relative flex flex-col gap-3 overflow-hidden rounded-2xl border border-brand/10 bg-white p-4 shadow-card transition hover:-translate-y-0.5 hover:shadow-glow dark:border-white/10 dark:bg-[#241218]"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className={`grid h-10 w-10 place-items-center rounded-xl text-white shadow-sm ${action.iconBg}`}>
-                      {action.icon}
+            {/* ── Quick actions ── */}
+            <div className="relative -mt-6 px-1 sm:-mt-8">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                {QUICK_ACTIONS.map((action) => (
+                  <Link
+                    key={action.to}
+                    to={action.to}
+                    className="group relative flex flex-col gap-3 overflow-hidden rounded-2xl border border-brand/10 bg-white p-4 shadow-card transition hover:-translate-y-0.5 hover:shadow-glow dark:border-white/10 dark:bg-[#241218]"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className={`grid h-10 w-10 place-items-center rounded-xl text-white shadow-sm ${action.iconBg}`}>
+                        {action.icon}
+                      </div>
+                      <ArrowUpRight className="h-4 w-4 text-ink/20 transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-brand dark:text-[#F5EDE7]/20" />
                     </div>
-                    <ArrowUpRight className="h-4 w-4 text-ink/20 transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-brand dark:text-[#F5EDE7]/20" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-bold text-ink dark:text-[#F5EDE7]">{action.title}</p>
-                    <p className="text-xs text-ink/50 dark:text-[#F5EDE7]/50">{action.subtitle}</p>
-                  </div>
-                </Link>
-              ))}
+                    <div>
+                      <p className="text-sm font-bold text-ink dark:text-[#F5EDE7]">{action.title}</p>
+                      <p className="text-xs text-ink/50 dark:text-[#F5EDE7]/50">{action.subtitle}</p>
+                    </div>
+                  </Link>
+                ))}
+              </div>
             </div>
-          </div>
 
-          {/* ── Stats ── */}
-          <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <div className="card flex flex-col gap-1 p-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-ink/50 dark:text-[#F5EDE7]/50">Forms</p>
-              <p className="font-display text-2xl font-bold">{loading ? "—" : forms.length}</p>
+            {/* ── Stats ── */}
+            <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div className="card flex flex-col gap-1 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-ink/50 dark:text-[#F5EDE7]/50">Forms</p>
+                <p className="font-display text-2xl font-bold">{loading ? "—" : forms.length}</p>
+              </div>
+              <div className="card flex flex-col gap-1 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-ink/50 dark:text-[#F5EDE7]/50">Questions</p>
+                <p className="font-display text-2xl font-bold">{loading ? "—" : totalQuestions}</p>
+              </div>
+              <div className="card flex flex-col gap-1 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-ink/50 dark:text-[#F5EDE7]/50">Last active</p>
+                <p className="font-display text-base font-bold">{loading ? "—" : forms[0] ? formatDate(forms[0].createdAt) : "—"}</p>
+              </div>
+              <div className="card flex flex-col gap-1 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-ink/50 dark:text-[#F5EDE7]/50">Plan</p>
+                <p className="font-display text-base font-bold">
+                  {unlocked ? "∞ Unlimited" : `${Math.min(todayCount, DAILY_LIMIT)}/${DAILY_LIMIT} today`}
+                </p>
+                {!unlocked && (
+                  <button onClick={() => setShowUnlock(true)} className="mt-1 text-left text-xs font-semibold text-brand hover:underline">
+                    Unlock →
+                  </button>
+                )}
+              </div>
             </div>
-            <div className="card flex flex-col gap-1 p-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-ink/50 dark:text-[#F5EDE7]/50">Questions</p>
-              <p className="font-display text-2xl font-bold">{loading ? "—" : totalQuestions}</p>
-            </div>
-            <div className="card flex flex-col gap-1 p-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-ink/50 dark:text-[#F5EDE7]/50">Last active</p>
-              <p className="font-display text-base font-bold">{loading ? "—" : forms[0] ? formatDate(forms[0].createdAt) : "—"}</p>
-            </div>
-            <div className="card flex flex-col gap-1 p-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-ink/50 dark:text-[#F5EDE7]/50">Plan</p>
-              <p className="font-display text-base font-bold">
-                {unlocked ? "∞ Unlimited" : `${Math.min(todayCount, DAILY_LIMIT)}/${DAILY_LIMIT} today`}
-              </p>
-              {!unlocked && (
-                <button onClick={() => setShowUnlock(true)} className="mt-1 text-left text-xs font-semibold text-brand hover:underline">
-                  Unlock →
-                </button>
+
+            {/* ── Forms list ── */}
+            <div className="mt-8">
+              <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2 className="font-display text-xl font-bold">Your forms</h2>
+                  <p className="text-sm text-ink/60 dark:text-[#F5EDE7]/60">
+                    {forms.length} form{forms.length !== 1 ? "s" : ""} created
+                  </p>
+                </div>
+                <div className="relative w-full sm:w-64">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink/40" />
+                  <input
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Search forms..."
+                    className="input pl-9"
+                  />
+                </div>
+              </div>
+
+              {loading ? (
+                <div className="card flex items-center justify-center gap-2 p-12 text-sm text-ink/60">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Loading your forms…
+                </div>
+              ) : filtered.length === 0 ? (
+                <EmptyState hasAny={forms.length > 0} />
+              ) : (
+                <div className="space-y-3">
+                  {filtered.map((f) => (
+                    <FormCard key={f.id} form={f} />
+                  ))}
+                </div>
               )}
             </div>
           </div>
+        </main>
 
-          {/* ── Forms list ── */}
-          <div className="mt-8">
-            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h2 className="font-display text-xl font-bold">Your forms</h2>
-                <p className="text-sm text-ink/60 dark:text-[#F5EDE7]/60">
-                  {forms.length} form{forms.length !== 1 ? "s" : ""} created
-                </p>
-              </div>
-              <div className="relative w-full sm:w-64">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink/40" />
-                <input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search forms..."
-                  className="input pl-9"
-                />
-              </div>
-            </div>
-
-            {loading ? (
-              <div className="card flex items-center justify-center gap-2 p-12 text-sm text-ink/60">
-                <Loader2 className="h-4 w-4 animate-spin" /> Loading your forms…
-              </div>
-            ) : filtered.length === 0 ? (
-              <EmptyState hasAny={forms.length > 0} />
-            ) : (
-              <div className="space-y-3">
-                {filtered.map((f) => (
-                  <FormCard key={f.id} form={f} />
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      </main>
-
-      <Footer />
+        <Footer />
+      </div>
 
       <UnlockDialog
         open={showUnlock}
@@ -285,7 +286,7 @@ export default function Dashboard() {
         onClose={() => setShowUnlock(false)}
         onUnlocked={() => setShowUnlock(false)}
       />
-    </div>
+    </AppShell>
   );
 }
 
@@ -313,7 +314,6 @@ function FormCard({ form }: { form: FormDoc }) {
 
   return (
     <div className="card p-4 transition hover:shadow-glow">
-      {/* Top row */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
@@ -341,7 +341,6 @@ function FormCard({ form }: { form: FormDoc }) {
           </div>
         </div>
 
-        {/* Primary action */}
         <a
           href={form.responderUri}
           target="_blank"
@@ -352,7 +351,6 @@ function FormCard({ form }: { form: FormDoc }) {
         </a>
       </div>
 
-      {/* Bottom row — secondary actions */}
       <div className="mt-3 flex items-center gap-2 border-t border-brand/5 pt-3 dark:border-white/5">
         <a
           href={form.editUri}
@@ -382,7 +380,6 @@ function FormCard({ form }: { form: FormDoc }) {
         </button>
       </div>
 
-      {/* Confirm delete */}
       {confirmDelete && (
         <div className="mt-3 rounded-2xl border border-red-200 bg-red-50 p-4 dark:border-red-500/30 dark:bg-red-950/30">
           <p className="text-sm font-semibold text-red-700 dark:text-red-300">
