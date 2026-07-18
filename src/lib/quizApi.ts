@@ -8,11 +8,11 @@ async function headers(): Promise<Record<string, string>> {
   return { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
 }
 
-async function call<T>(path: string, body: any): Promise<T> {
-  const res = await fetch(path, {
+async function call<T>(endpoint: "/api/quiz" | "/api/quiz-automation", action: string, body: any): Promise<T> {
+  const res = await fetch(endpoint, {
     method: "POST",
     headers: await headers(),
-    body: JSON.stringify(body),
+    body: JSON.stringify({ action, ...body }),
   });
   const ct = res.headers.get("content-type") || "";
   const data = ct.includes("application/json") ? await res.json() : { error: (await res.text()).slice(0, 400) };
@@ -52,21 +52,21 @@ export type QuizQuestion = {
 };
 
 export const analyzeMaterial = (text: string) =>
-  call<QuizAnalysis>("/api/quiz/analyze", { text });
+  call<QuizAnalysis>("/api/quiz", "analyze", { text });
 
 export const generateQuiz = (opts: {
   text: string;
   count: number;
   difficulty: string;
   questionType: string;
-}) => call<{ questions: QuizQuestion[] }>("/api/quiz/generate", opts);
+}) => call<{ questions: QuizQuestion[] }>("/api/quiz", "generate", opts);
 
 export const createQuizForm = (opts: {
   title: string;
   questions: QuizQuestion[];
   mode: "quiz" | "form";
   expiresAt?: string | null;
-}) => call<{ formId: string; responderUri: string; editUri: string }>("/api/quiz/create-form", opts);
+}) => call<{ formId: string; responderUri: string; editUri: string }>("/api/quiz", "create-form", opts);
 
 // ── Automation pipeline ──────────────────────────────────────────────────
 
@@ -75,7 +75,8 @@ export type PlannedUnit = { unitTitle: string; subtopics: PlannedSubtopic[] };
 
 export const planUnits = (opts: { text: string; mode: "whole-subject" | "single-unit" }) =>
   call<{ units?: PlannedUnit[]; subtopics?: PlannedSubtopic[]; degraded: boolean }>(
-    "/api/quiz/plan-units",
+    "/api/quiz-automation",
+    "plan-units",
     opts
   );
 
@@ -86,7 +87,7 @@ export const createDraft = (opts: {
   subjectTitle: string;
   sourceMode: "multi-file" | "single-file";
   units: PlannedUnit[];
-}) => call<{ draftId: string; units: DraftUnitRef[] }>("/api/quiz/create-draft", opts);
+}) => call<{ draftId: string; units: DraftUnitRef[] }>("/api/quiz-automation", "create-draft", opts);
 
 export const draftGenerate = (opts: {
   draftId: string;
@@ -97,6 +98,7 @@ export const draftGenerate = (opts: {
   questionType?: string;
 }) =>
   call<{ questions: QuizQuestion[]; fromCache: boolean; usedModel: string; status: "done" }>(
-    "/api/quiz/draft-generate",
+    "/api/quiz-automation",
+    "draft-generate",
     opts
   );
