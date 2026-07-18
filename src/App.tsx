@@ -8,6 +8,7 @@ import ConnectGoogle from "./pages/ConnectGoogle";
 import GoogleCallback from "./pages/GoogleCallback";
 import AIQuiz from "./pages/AIQuiz";
 import QuizAutomation from "./pages/QuizAutomation";
+import QuizDraftReview from "./pages/QuizDraftReview";
 import Privacy from "./pages/Privacy";
 import Terms from "./pages/Terms";
 import NotFound from "./pages/NotFound";
@@ -42,6 +43,14 @@ export default function App() {
         element={
           <ProtectedRoute>
             <QuizAutomation />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/quiz-draft/:draftId"
+        element={
+          <ProtectedRoute>
+            <QuizDraftReview />
           </ProtectedRoute>
         }
       />
