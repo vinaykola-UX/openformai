@@ -18,6 +18,7 @@ import {
   Clock,
   Link2,
   ChevronRight,
+  ArrowUpRight,
   Search,
   Loader2,
   Lock,
@@ -25,6 +26,7 @@ import {
   Trash2,
   Wand2,
   Brain,
+  Layers,
   Infinity as InfinityIcon,
 } from "lucide-react";
 import Navbar from "../components/Navbar";
@@ -59,6 +61,45 @@ function formatDate(ts?: Timestamp) {
   if (days < 7) return `${days}d ago`;
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
+
+type QuickAction = {
+  to: string;
+  icon: React.ReactNode;
+  title: string;
+  subtitle: string;
+  iconBg: string;
+};
+
+const QUICK_ACTIONS: QuickAction[] = [
+  {
+    to: "/dashboard/new",
+    icon: <Wand2 className="h-5 w-5" />,
+    title: "New Form",
+    subtitle: "Paste or upload",
+    iconBg: "bg-gradient-to-br from-brand to-brand/70",
+  },
+  {
+    to: "/ai-quiz",
+    icon: <Brain className="h-5 w-5" />,
+    title: "AI Quiz",
+    subtitle: "From study notes",
+    iconBg: "bg-gradient-to-br from-violet-500 to-indigo-500",
+  },
+  {
+    to: "/automate",
+    icon: <Layers className="h-5 w-5" />,
+    title: "Automate",
+    subtitle: "Whole subject, unit-wise",
+    iconBg: "bg-gradient-to-br from-emerald-500 to-teal-500",
+  },
+  {
+    to: "/connect-google",
+    icon: <Link2 className="h-5 w-5" />,
+    title: "Google Account",
+    subtitle: "Connect to create forms",
+    iconBg: "bg-gradient-to-br from-amber-500 to-orange-500",
+  },
+];
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -144,53 +185,35 @@ export default function Dashboard() {
               <p className="mt-2 text-sm text-white/80 sm:text-base">
                 Turn any text, PDF, or image into a real Google Form in seconds.
               </p>
+            </div>
+          </div>
 
-              {/* ── Action cards ── */}
-              <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
+          {/* ── Quick actions ── */}
+          <div className="relative -mt-6 px-1 sm:-mt-8">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {QUICK_ACTIONS.map((action) => (
                 <Link
-                  to="/dashboard/new"
-                  className="flex flex-col items-start gap-2 rounded-2xl bg-white/15 p-4 backdrop-blur transition hover:bg-white/25 active:scale-[0.98]"
+                  key={action.to}
+                  to={action.to}
+                  className="group relative flex flex-col gap-3 overflow-hidden rounded-2xl border border-brand/10 bg-white p-4 shadow-card transition hover:-translate-y-0.5 hover:shadow-glow dark:border-white/10 dark:bg-[#241218]"
                 >
-                  <div className="grid h-9 w-9 place-items-center rounded-xl bg-white text-brand">
-                    <Wand2 className="h-4 w-4" />
+                  <div className="flex items-center justify-between">
+                    <div className={`grid h-10 w-10 place-items-center rounded-xl text-white shadow-sm ${action.iconBg}`}>
+                      {action.icon}
+                    </div>
+                    <ArrowUpRight className="h-4 w-4 text-ink/20 transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-brand dark:text-[#F5EDE7]/20" />
                   </div>
                   <div>
-                    <p className="text-sm font-bold">New Form</p>
-                    <p className="text-xs text-white/70">Paste or upload</p>
+                    <p className="text-sm font-bold text-ink dark:text-[#F5EDE7]">{action.title}</p>
+                    <p className="text-xs text-ink/50 dark:text-[#F5EDE7]/50">{action.subtitle}</p>
                   </div>
                 </Link>
-
-                <Link
-                  to="/ai-quiz"
-                  className="flex flex-col items-start gap-2 rounded-2xl bg-white/15 p-4 backdrop-blur transition hover:bg-white/25 active:scale-[0.98]"
-                >
-                  <div className="grid h-9 w-9 place-items-center rounded-xl bg-white text-brand">
-                    <Brain className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-bold">AI Quiz</p>
-                    <p className="text-xs text-white/70">From study notes</p>
-                  </div>
-                </Link>
-
-                <Link
-                  to="/connect-google"
-                  className="flex flex-col items-start gap-2 rounded-2xl bg-white/15 p-4 backdrop-blur transition hover:bg-white/25 active:scale-[0.98] col-span-2 sm:col-span-1"
-                >
-                  <div className="grid h-9 w-9 place-items-center rounded-xl bg-white text-brand">
-                    <Link2 className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-bold">Google Account</p>
-                    <p className="text-xs text-white/70">Connect to create forms</p>
-                  </div>
-                </Link>
-              </div>
+              ))}
             </div>
           </div>
 
           {/* ── Stats ── */}
-          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
             <div className="card flex flex-col gap-1 p-4">
               <p className="text-xs font-semibold uppercase tracking-wide text-ink/50 dark:text-[#F5EDE7]/50">Forms</p>
               <p className="font-display text-2xl font-bold">{loading ? "—" : forms.length}</p>
