@@ -11,7 +11,7 @@ import {
   RefreshCw,
   Sparkles,
 } from "lucide-react";
-import Navbar from "../components/Navbar";
+import AppShell from "../components/AppShell";
 import ErrorCard from "../components/ErrorCard";
 import { db } from "../lib/firebase";
 import { createQuizForm, draftGenerate, type QuizQuestion } from "../lib/quizApi";
@@ -263,18 +263,16 @@ export default function QuizDraftReview() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-cream dark:bg-[#1A0E12]">
-        <Navbar />
+      <AppShell>
         <div className="flex items-center justify-center p-16">
           <Loader2 className="h-6 w-6 animate-spin text-brand" />
         </div>
-      </div>
+      </AppShell>
     );
   }
 
   return (
-    <div className="min-h-screen bg-cream dark:bg-[#1A0E12]">
-      <Navbar />
+    <AppShell>
       <main className="mx-auto w-full max-w-2xl px-4 py-8 sm:px-6">
         <button onClick={() => nav("/dashboard")} className="mb-4 flex items-center gap-1 text-sm text-ink/60 hover:text-brand">
           <ArrowLeft className="h-4 w-4" /> Back
@@ -408,7 +406,7 @@ export default function QuizDraftReview() {
           </div>
         )}
       </main>
-    </div>
+    </AppShell>
   );
 }
 
