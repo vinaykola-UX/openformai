@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { doc, getDoc } from "firebase/firestore";
 import { CheckCircle2, Link as LinkIcon, ArrowLeft } from "lucide-react";
-import Navbar from "../components/Navbar";
+import AppShell from "../components/AppShell";
 import ErrorCard from "../components/ErrorCard";
 import { db } from "../lib/firebase";
 import { useAuth } from "../contexts/AuthContext";
@@ -32,8 +32,7 @@ export default function ConnectGoogle() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <Navbar />
+    <AppShell>
       <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-10 sm:px-6">
         <Link to="/dashboard" className="btn-ghost mb-4 -ml-2">
           <ArrowLeft className="h-4 w-4" /> Back
@@ -58,6 +57,6 @@ export default function ConnectGoogle() {
           </button>
         </div>
       </main>
-    </div>
+    </AppShell>
   );
 }
