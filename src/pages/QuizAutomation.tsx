@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Upload, Loader2, FileText, X, CheckCircle2, AlertCircle, Sparkles } from "lucide-react";
-import Navbar from "../components/Navbar";
+import AppShell from "../components/AppShell";
 import ErrorCard from "../components/ErrorCard";
 import { extractFileText } from "../lib/api";
 import {
@@ -200,8 +200,7 @@ export default function QuizAutomation() {
   const total = progress.length;
 
   return (
-    <div className="min-h-screen bg-cream dark:bg-[#1A0E12]">
-      <Navbar />
+    <AppShell>
       <main className="mx-auto w-full max-w-2xl px-4 py-8 sm:px-6">
         <button onClick={() => nav("/dashboard")} className="mb-4 flex items-center gap-1 text-sm text-ink/60 hover:text-brand">
           <ArrowLeft className="h-4 w-4" /> Back
@@ -397,7 +396,7 @@ export default function QuizAutomation() {
           </div>
         )}
       </main>
-    </div>
+    </AppShell>
   );
 }
 
