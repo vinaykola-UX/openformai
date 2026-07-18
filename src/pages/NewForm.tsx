@@ -4,7 +4,7 @@ import {
   ArrowLeft, Sparkles, Wand2, CheckCircle2, ExternalLink,
   Upload, Link2, Loader2, Pencil, FileText, Users, GraduationCap
 } from "lucide-react";
-import Navbar from "../components/Navbar";
+import AppShell from "../components/AppShell";
 import {
   generateQuestions, createForm, extractFileText,
   extractDriveUrl, type ParsedQuestion
@@ -218,7 +218,7 @@ export default function NewForm() {
         err.message?.includes("FAILED_PRECONDITION") ||
         err.message?.includes("index")
       ) {
-        // ignore
+// ignore
       } else {
         setError(err.message);
       }
@@ -273,14 +273,12 @@ export default function NewForm() {
       }
     );
   }
-
  // ── Success screen ──
 
   if (result) {
     const previewUrl = `${window.location.origin}/preview/${result.formId}`;
     return (
-      <div className="flex min-h-screen flex-col">
-        <Navbar />
+      <AppShell>
         <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-12 sm:px-6">
           <div className="card p-10 text-center">
             <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-2xl bg-brand text-white">
@@ -337,15 +335,14 @@ export default function NewForm() {
             </div>
           </div>
         </main>
-      </div>
+      </AppShell>
     );
   }
 
   // ── Step 1: Template picker ──
   if (step === "pick") {
     return (
-      <div className="flex min-h-screen flex-col">
-        <Navbar />
+      <AppShell>
         <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-10 sm:px-6">
           <Link to="/dashboard" className="btn-ghost mb-6 -ml-2">
             <ArrowLeft className="h-4 w-4" /> Back
@@ -390,14 +387,13 @@ export default function NewForm() {
             You can edit any template after selecting it
           </p>
         </main>
-      </div>
+      </AppShell>
     );
   }
 
   // ── Step 2: Build form ──
   return (
-    <div className="flex min-h-screen flex-col">
-      <Navbar />
+    <AppShell>
       <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-10 sm:px-6">
         <button
           onClick={() => setStep("pick")}
@@ -638,6 +634,6 @@ export default function NewForm() {
           publish();
         }}
       />
-    </div>
+    </AppShell>
   );
 }
