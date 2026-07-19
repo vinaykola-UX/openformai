@@ -99,7 +99,27 @@ export default function AIQuiz() {
       setAnalyzing(false);
     }
   }
-async function publish() {
+
+  async function runGenerate() {
+    setError(""); setGenerating(true);
+    try {
+      const n = customCount ? Math.max(1, Math.min(100, Number(customCount) || 10)) : count;
+      const { questions: qs } = await generateQuiz({ text, count: n, difficulty, questionType: qType });
+      const defaults: QuizQuestion[] = [
+        { type: "SHORT", title: "Email ID", required: true, points: 0 },
+        { type: "SHORT", title: "Full Name", required: true, points: 0 },
+        { type: "SHORT", title: "Roll Number", required: true, points: 0 },
+      ];
+      setQuestions([...defaults, ...qs]);
+      setStep("review");
+    } catch (err: any) {
+      setError(err.message || "Quiz generation failed");
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  async function publish() {
     if (!questions?.length) return;
     setError(""); setCreating(true);
     try {
@@ -158,7 +178,7 @@ async function publish() {
         String(q.points ?? 1),
         q.explanation || "",
       ]));
-const csv = rows.map((r) => r.map((c) => `"${(c || "").replace(/"/g, '""')}"`).join(",")).join("\n");
+      const csv = rows.map((r) => r.map((c) => `"${(c || "").replace(/"/g, '""')}"`).join(",")).join("\n");
       downloadFile(`${safe}.csv`, csv, "text/csv");
     } else if (format === "xlsx") {
       const XLSX = await import("xlsx");
@@ -245,7 +265,8 @@ const csv = rows.map((r) => r.map((c) => `"${(c || "").replace(/"/g, '""')}"`).j
       </AppShell>
     );
   }
-return (
+
+  return (
     <AppShell>
       <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-10 sm:px-6">
         <Link to="/dashboard" className="btn-ghost mb-4 -ml-2">
@@ -361,6 +382,7 @@ return (
             )}
           </>
         )}
+
         {step === "review" && questions && (
           <>
             <div className="card p-6 sm:p-8">
@@ -450,6 +472,7 @@ return (
     </AppShell>
   );
 }
+
 // ─── Sub-components ──────────────────────────────────────────────
 
 function SummaryRow({ label, value }: { label: string; value: string }) {
