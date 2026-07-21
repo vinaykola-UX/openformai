@@ -16,7 +16,6 @@ import Terms from "./pages/Terms";
 import NotFound from "./pages/NotFound";
 import ProtectedRoute from "./components/ProtectedRoute";
 import FormAnalytics from "./pages/FormAnalytics";
-import FormPreview from "./pages/FormPreview";
 
 export default function App() {
   return (
@@ -82,14 +81,14 @@ export default function App() {
       />
       <Route path="/google/callback" element={<GoogleCallback />} />
       <Route path="/preview/:formId" element={<FormPreview />} />
-<Route
-  path="/dashboard/report/:formId"
-  element={
-    <ProtectedRoute>
-      <FormReport />
-    </ProtectedRoute>
-  }
-/>
+      <Route
+        path="/dashboard/report/:formId"
+        element={
+          <ProtectedRoute>
+            <FormReport />
+          </ProtectedRoute>
+        }
+      />
       <Route path="/privacy" element={<Privacy />} />
       <Route path="/terms" element={<Terms />} />
       <Route path="/app" element={<Navigate to="/dashboard" replace />} />
