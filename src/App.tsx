@@ -7,6 +7,7 @@ import NewForm from "./pages/NewForm";
 import ConnectGoogle from "./pages/ConnectGoogle";
 import GoogleCallback from "./pages/GoogleCallback";
 import FormPreview from "./pages/FormPreview";
+import FormReport from "./pages/FormReport";
 import AIQuiz from "./pages/AIQuiz";
 import QuizAutomation from "./pages/QuizAutomation";
 import QuizDraftReview from "./pages/QuizDraftReview";
