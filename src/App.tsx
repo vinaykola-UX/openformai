@@ -82,6 +82,14 @@ export default function App() {
       />
       <Route path="/google/callback" element={<GoogleCallback />} />
       <Route path="/preview/:formId" element={<FormPreview />} />
+<Route
+  path="/dashboard/report/:formId"
+  element={
+    <ProtectedRoute>
+      <FormReport />
+    </ProtectedRoute>
+  }
+/>
       <Route path="/privacy" element={<Privacy />} />
       <Route path="/terms" element={<Terms />} />
       <Route path="/app" element={<Navigate to="/dashboard" replace />} />
