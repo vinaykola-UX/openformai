@@ -28,6 +28,7 @@ import {
   Brain,
   Layers,
   Infinity as InfinityIcon,
+  ClipboardList,
 } from "lucide-react";
 import AppShell from "../components/AppShell";
 import CopyLinkButton from "../components/CopyLinkButton";
@@ -368,6 +369,13 @@ function FormCard({ form }: { form: FormDoc }) {
           className="flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-ink/60 hover:bg-brand/5 hover:text-brand dark:text-[#F5EDE7]/60 transition"
         >
           <BarChart2 className="h-3.5 w-3.5" /> Analytics
+        </button>
+
+        <button
+          onClick={() => nav(`/dashboard/report/${form.id}`)}
+          className="flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-ink/60 hover:bg-brand/5 hover:text-brand dark:text-[#F5EDE7]/60 transition"
+        >
+          <ClipboardList className="h-3.5 w-3.5" /> Report
         </button>
 
         <div className="flex-1" />
