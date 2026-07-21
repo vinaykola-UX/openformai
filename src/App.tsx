@@ -6,6 +6,7 @@ import Dashboard from "./pages/Dashboard";
 import NewForm from "./pages/NewForm";
 import ConnectGoogle from "./pages/ConnectGoogle";
 import GoogleCallback from "./pages/GoogleCallback";
+import FormPreview from "./pages/FormPreview";
 import AIQuiz from "./pages/AIQuiz";
 import QuizAutomation from "./pages/QuizAutomation";
 import QuizDraftReview from "./pages/QuizDraftReview";
