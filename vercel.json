@@ -1,5 +1,16 @@
 {
   "rewrites": [
+    { "source": "/api/create-form", "destination": "/api/forms?action=create-form" },
+    { "source": "/api/delete-form", "destination": "/api/forms?action=delete-form" },
+    { "source": "/api/preview-form", "destination": "/api/forms?action=preview-form" },
+    { "source": "/api/form-analytics", "destination": "/api/forms?action=form-analytics" },
+    { "source": "/api/form-report", "destination": "/api/forms?action=form-report" },
+    { "source": "/api/extract", "destination": "/api/content?action=extract" },
+    { "source": "/api/drive-import", "destination": "/api/content?action=drive-import" },
+    { "source": "/api/generate", "destination": "/api/content?action=generate" },
+    { "source": "/api/google/auth-url", "destination": "/api/account?action=google-auth-url" },
+    { "source": "/api/google/callback", "destination": "/api/account?action=google-callback" },
+    { "source": "/api/unlock", "destination": "/api/account?action=unlock" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }
