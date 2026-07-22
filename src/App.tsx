@@ -6,8 +6,6 @@ import Dashboard from "./pages/Dashboard";
 import NewForm from "./pages/NewForm";
 import ConnectGoogle from "./pages/ConnectGoogle";
 import GoogleCallback from "./pages/GoogleCallback";
-import FormPreview from "./pages/FormPreview";
-import FormReport from "./pages/FormReport";
 import AIQuiz from "./pages/AIQuiz";
 import QuizAutomation from "./pages/QuizAutomation";
 import QuizDraftReview from "./pages/QuizDraftReview";
@@ -16,6 +14,8 @@ import Terms from "./pages/Terms";
 import NotFound from "./pages/NotFound";
 import ProtectedRoute from "./components/ProtectedRoute";
 import FormAnalytics from "./pages/FormAnalytics";
+import FormPreview from "./pages/FormPreview";
+import FormReport from "./pages/FormReport";
 
 export default function App() {
   return (
@@ -72,6 +72,14 @@ export default function App() {
         }
       />
       <Route
+        path="/dashboard/report/:formId"
+        element={
+          <ProtectedRoute>
+            <FormReport />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/connect-google"
         element={
           <ProtectedRoute>
@@ -81,14 +89,6 @@ export default function App() {
       />
       <Route path="/google/callback" element={<GoogleCallback />} />
       <Route path="/preview/:formId" element={<FormPreview />} />
-      <Route
-        path="/dashboard/report/:formId"
-        element={
-          <ProtectedRoute>
-            <FormReport />
-          </ProtectedRoute>
-        }
-      />
       <Route path="/privacy" element={<Privacy />} />
       <Route path="/terms" element={<Terms />} />
       <Route path="/app" element={<Navigate to="/dashboard" replace />} />
