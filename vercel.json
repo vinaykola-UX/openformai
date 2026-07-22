@@ -1,12 +1,6 @@
 {
-  "rewrites": [
-    {
-      "source": "/api/google/auth-url",
-      "destination": "/api/google?action=auth-url"
-    },
-    {
-      "source": "/api/google/callback",
-      "destination": "/api/google?action=callback"
-    }
-  ]
+  "rewrites": [
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
+  
+]
 }
