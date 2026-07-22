@@ -214,6 +214,34 @@ export default function Dashboard() {
                 ))}
               </div>
             </div>
+
+            {/* ── Stats ── */}
+            <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div className="card flex flex-col gap-1 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-ink/50 dark:text-[#F5EDE7]/50">Forms</p>
+                <p className="font-display text-2xl font-bold">{loading ? "—" : forms.length}</p>
+              </div>
+              <div className="card flex flex-col gap-1 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-ink/50 dark:text-[#F5EDE7]/50">Questions</p>
+                <p className="font-display text-2xl font-bold">{loading ? "—" : totalQuestions}</p>
+              </div>
+              <div className="card flex flex-col gap-1 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-ink/50 dark:text-[#F5EDE7]/50">Last active</p>
+                <p className="font-display text-base font-bold">{loading ? "—" : forms[0] ? formatDate(forms[0].createdAt) : "—"}</p>
+              </div>
+              <div className="card flex flex-col gap-1 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-ink/50 dark:text-[#F5EDE7]/50">Plan</p>
+                <p className="font-display text-base font-bold">
+                  {unlocked ? "∞ Unlimited" : `${Math.min(todayCount, DAILY_LIMIT)}/${DAILY_LIMIT} today`}
+                </p>
+                {!unlocked && (
+                  <button onClick={() => setShowUnlock(true)} className="mt-1 text-left text-xs font-semibold text-brand hover:underline">
+                    Unlock →
+                  </button>
+                )}
+              </div>
+            </div>
+
             {/* ── Forms list ── */}
             <div className="mt-8">
               <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
