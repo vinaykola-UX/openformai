@@ -24,11 +24,11 @@ import {
   Lock,
   BarChart2,
   Trash2,
+  ClipboardList,
   Wand2,
   Brain,
   Layers,
   Infinity as InfinityIcon,
-  ClipboardList,
 } from "lucide-react";
 import AppShell from "../components/AppShell";
 import CopyLinkButton from "../components/CopyLinkButton";
@@ -48,7 +48,7 @@ type FormDoc = {
   expiresAt?: any;
   createdAt?: Timestamp;
   isQuiz?: boolean;
-  source?: string;
+  quizMode?: boolean;
 };
 
 function formatDate(ts?: Timestamp) {
@@ -214,34 +214,6 @@ export default function Dashboard() {
                 ))}
               </div>
             </div>
-
-            {/* ── Stats ── */}
-            <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <div className="card flex flex-col gap-1 p-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-ink/50 dark:text-[#F5EDE7]/50">Forms</p>
-                <p className="font-display text-2xl font-bold">{loading ? "—" : forms.length}</p>
-              </div>
-              <div className="card flex flex-col gap-1 p-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-ink/50 dark:text-[#F5EDE7]/50">Questions</p>
-                <p className="font-display text-2xl font-bold">{loading ? "—" : totalQuestions}</p>
-              </div>
-              <div className="card flex flex-col gap-1 p-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-ink/50 dark:text-[#F5EDE7]/50">Last active</p>
-                <p className="font-display text-base font-bold">{loading ? "—" : forms[0] ? formatDate(forms[0].createdAt) : "—"}</p>
-              </div>
-              <div className="card flex flex-col gap-1 p-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-ink/50 dark:text-[#F5EDE7]/50">Plan</p>
-                <p className="font-display text-base font-bold">
-                  {unlocked ? "∞ Unlimited" : `${Math.min(todayCount, DAILY_LIMIT)}/${DAILY_LIMIT} today`}
-                </p>
-                {!unlocked && (
-                  <button onClick={() => setShowUnlock(true)} className="mt-1 text-left text-xs font-semibold text-brand hover:underline">
-                    Unlock →
-                  </button>
-                )}
-              </div>
-            </div>
-
             {/* ── Forms list ── */}
             <div className="mt-8">
               <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -297,7 +269,6 @@ function FormCard({ form }: { form: FormDoc }) {
   const nav = useNavigate();
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
 
   async function handleDelete() {
     setDeleting(true);
@@ -314,6 +285,8 @@ function FormCard({ form }: { form: FormDoc }) {
   const isExpired = form.expiresAt
     ? (form.expiresAt.toDate ? form.expiresAt.toDate() : new Date(form.expiresAt)) < new Date()
     : false;
+
+  const isQuizForm = !!(form.isQuiz || form.quizMode);
 
   return (
     <div className="card p-4 transition hover:shadow-glow">
@@ -354,7 +327,7 @@ function FormCard({ form }: { form: FormDoc }) {
         </a>
       </div>
 
-      <div className="mt-3 flex items-center gap-2 border-t border-brand/5 pt-3 dark:border-white/5">
+      <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-brand/5 pt-3 dark:border-white/5">
         <a
           href={form.editUri}
           target="_blank"
@@ -373,7 +346,7 @@ function FormCard({ form }: { form: FormDoc }) {
           <BarChart2 className="h-3.5 w-3.5" /> Analytics
         </button>
 
-        {(form.isQuiz || form.source === "ai-quiz") && (
+        {isQuizForm && (
           <button
             onClick={() => nav(`/dashboard/report/${form.id}`)}
             className="flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-ink/60 hover:bg-brand/5 hover:text-brand dark:text-[#F5EDE7]/60 transition"
