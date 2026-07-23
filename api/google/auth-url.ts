@@ -9,7 +9,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const url = client.generateAuthUrl({
       access_type: "offline",
       prompt: "consent",
-      scope: [FORMS_SCOPE, "https://www.googleapis.com/auth/drive.file"],
+      scope: [
+        FORMS_SCOPE,
+        "https://www.googleapis.com/auth/drive.file",
+        "https://www.googleapis.com/auth/forms.responses.readonly",
+      ],
       state: uid,
     });
     return res.status(200).json({ url });
