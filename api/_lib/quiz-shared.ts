@@ -13,12 +13,12 @@ export const QUESTIONS_SCHEMA = {
           type: { type: Type.STRING, enum: ["MCQ", "CHECKBOX", "TRUE_FALSE", "SHORT", "PARAGRAPH"] },
           title: { type: Type.STRING },
           options: { type: Type.ARRAY, items: { type: Type.STRING } },
-          correctAnswers: { type: Type.ARRAY, items: { type: Type.STRING } },
+          correctAnswers: { type: Type.ARRAY, items: { type: Type.STRING }, minItems: 1 },
           explanation: { type: Type.STRING },
           points: { type: Type.NUMBER },
           difficulty: { type: Type.STRING, enum: ["Easy", "Medium", "Hard"] },
         },
-        required: ["type", "title"],
+        required: ["type", "title", "correctAnswers"],
       },
     },
   },
@@ -30,18 +30,27 @@ export const QUESTIONS_SYSTEM = `You are an expert educator writing high-quality
 Rules:
 - Only use facts explicitly present in the material — never hallucinate.
 - No duplicate or near-duplicate questions.
-- MCQ: exactly 4 options, exactly 1 correct answer, 3 realistic distractors from the same topic.
+- EVERY question, with no exceptions, MUST have a non-empty "correctAnswers" array. A question without a correct answer is incomplete and will be rejected.
+- MCQ: exactly 4 options, exactly 1 correct answer in correctAnswers, 3 realistic distractors from the same topic.
 - CHECKBOX: 4-6 options, 2+ correct answers listed in correctAnswers.
-- TRUE_FALSE: options ["True","False"] and 1 correct answer.
-- SHORT / PARAGRAPH: correctAnswers = one canonical model answer.
-- Always include a short explanation (max 200 chars).
+- TRUE_FALSE: options ["True","False"] and exactly 1 correct answer in correctAnswers.
+- SHORT / PARAGRAPH: correctAnswers = an array with exactly one canonical model answer (a short, concrete, gradable answer — not a vague summary).
+- correctAnswers values must be copied EXACTLY, character-for-character, from the matching entries in "options" — never paraphrase, reword, or add labels like "A)" to them.
+- If you are ever unsure of the single best answer, pick the fact most directly and explicitly stated in the material — never skip correctAnswers.
+- Always include a short explanation (max 200 chars) that justifies the correct answer using the material.
 - Points: Easy=1, Medium=2, Hard=3.
 - Match the requested count exactly.`;
+
+// Bump this whenever QUESTIONS_SCHEMA or QUESTIONS_SYSTEM changes materially —
+// it's folded into the cache key so old cached questions (generated under the
+// previous prompt/schema) are never served again; a version bump makes every
+// old cache entry simply not match anymore, so generation runs fresh instead.
+const PROMPT_VERSION = "v2";
 
 export const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 export function makeCacheKey(text: string, count: number, difficulty: string, questionType: string) {
-  const raw = `${text.slice(0, 40000)}|${count}|${difficulty}|${questionType}`;
+  const raw = `${PROMPT_VERSION}|${text.slice(0, 40000)}|${count}|${difficulty}|${questionType}`;
   return createHash("sha256").update(raw).digest("hex");
 }
 
@@ -66,6 +75,8 @@ export function buildQuestionsPrompt(
 ${typeInstr}
 ${diffInstr}
 
+Remember: every single question must include a non-empty correctAnswers array, and each value in it must exactly match one of that question's options. Do not return any question without one.
+
 STUDY MATERIAL:
 """
 ${text.slice(0, 40000)}
@@ -73,16 +84,36 @@ ${text.slice(0, 40000)}
 }
 
 export function parseQuestions(raw: any[]): any[] {
-  return (raw || []).map((q: any) => ({
-    type: q.type,
-    title: q.title,
-    options: q.options || [],
-    correctAnswers: q.correctAnswers || [],
-    explanation: q.explanation || "",
-    points: q.points ?? (q.difficulty === "Hard" ? 3 : q.difficulty === "Easy" ? 1 : 2),
-    difficulty: q.difficulty || "Medium",
-    required: true,
-  }));
+  return (raw || []).map((q: any) => {
+    const options: string[] = q.options || [];
+    let correctAnswers: string[] = (q.correctAnswers || []).filter(
+      (a: any) => typeof a === "string" && a.trim().length > 0
+    );
+
+    // Safety net: if the model's correctAnswers don't exactly match any option
+    // text (e.g. it paraphrased instead of copying verbatim), try a
+    // case/whitespace-insensitive match against the real option strings so a
+    // near-miss still ends up ticked correctly in the editor.
+    if (options.length && correctAnswers.length) {
+      correctAnswers = correctAnswers.map((ans) => {
+        const exact = options.find((o) => o === ans);
+        if (exact) return exact;
+        const loose = options.find((o) => o.trim().toLowerCase() === ans.trim().toLowerCase());
+        return loose || ans;
+      });
+    }
+
+    return {
+      type: q.type,
+      title: q.title,
+      options,
+      correctAnswers,
+      explanation: q.explanation || "",
+      points: q.points ?? (q.difficulty === "Hard" ? 3 : q.difficulty === "Easy" ? 1 : 2),
+      difficulty: q.difficulty || "Medium",
+      required: true,
+    };
+  });
 }
 
 export async function runGeminiQuestions(prompt: string): Promise<any[]> {
