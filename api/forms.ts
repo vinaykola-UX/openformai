@@ -204,8 +204,6 @@ function buildItem(q: Question, index: number) {
       };
 
     case "FILE_UPLOAD":
-      // Google Forms API cannot create file-upload questions (platform limitation).
-      // Fallback: short-answer field asking for a link, with a clear note.
       return {
         createItem: {
           item: {
@@ -252,7 +250,6 @@ function buildItem(q: Question, index: number) {
       };
   }
 }
-
 // ─────────────────────────────────────────────────────────────────────────
 // action: "create-form"
 // ─────────────────────────────────────────────────────────────────────────
@@ -274,7 +271,6 @@ async function handleCreateForm(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: "Google account not connected. Visit /connect-google." });
     }
 
-    // Free-tier limits: 5 forms/day, 80 forms/month total — unless unlocked with passcode.
     const DAILY_LIMIT = 5;
     const TOTAL_LIMIT = 80;
     if (!userData.unlocked) {
@@ -315,11 +311,9 @@ async function handleCreateForm(req: VercelRequest, res: VercelResponse) {
     client.setCredentials({ refresh_token: refreshToken });
     const forms = google.forms({ version: "v1", auth: client });
 
-    // 1. Create form (only title allowed in create)
     const created = await forms.forms.create({ requestBody: { info: { title } } });
     const formId = created.data.formId!;
 
-    // 2. Add questions — no quiz mode, no grading, ever.
     const requests: any[] = questions.map((q, i) => buildItem(q, i));
 
     await forms.forms.batchUpdate({ formId, requestBody: { requests } });
@@ -399,7 +393,6 @@ async function handleDeleteForm(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({ error: err.message || "Delete failed" });
   }
 }
-
 // ─────────────────────────────────────────────────────────────────────────
 // action: "preview-form" — public, no auth required
 // ─────────────────────────────────────────────────────────────────────────
@@ -442,6 +435,7 @@ async function handlePreviewForm(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({ error: "Failed to load form preview." });
   }
 }
+
 // ─────────────────────────────────────────────────────────────────────────
 // action: "form-analytics"
 // ─────────────────────────────────────────────────────────────────────────
@@ -547,7 +541,6 @@ async function handleFormAnalytics(req: VercelRequest, res: VercelResponse) {
       .json({ error: err.message || "Analytics failed" });
   }
 }
-
 // ─────────────────────────────────────────────────────────────────────────
 // action: "form-report"
 // ─────────────────────────────────────────────────────────────────────────
@@ -563,6 +556,24 @@ async function handleFormReport(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: "Missing googleFormId" });
 
     const { db } = getAdmin();
+
+    const formQuery = await db
+      .collection("forms")
+      .where("uid", "==", uid)
+      .where("googleFormId", "==", googleFormId)
+      .limit(1)
+      .get();
+
+    if (formQuery.empty) {
+      return res.status(404).json({ error: "Form not found in your account." });
+    }
+    const storedForm = formQuery.docs[0].data();
+    const storedQuestions: Array<{
+      title?: string;
+      correctAnswers?: string[];
+      points?: number;
+    }> = Array.isArray(storedForm.questions) ? storedForm.questions : [];
+
     const userSnap = await db.collection("users").doc(uid).get();
     const refreshToken = userSnap.data()?.googleRefreshToken;
     if (!refreshToken)
@@ -593,12 +604,15 @@ async function handleFormReport(req: VercelRequest, res: VercelResponse) {
       const q = item.questionItem?.question;
       if (!q) return;
       const qId = q.questionId;
-      const correctAnswers = q.grading?.correctAnswers?.answers?.map((a: any) => a.value.toLowerCase().trim()) || [];
+      const stored = storedQuestions[idx];
+      const correctAnswers = (stored?.correctAnswers || [])
+        .map((a: any) => String(a).toLowerCase().trim())
+        .filter(Boolean);
       questionMap[qId] = {
-        title: item.title || `Q${idx + 1}`,
+        title: item.title || stored?.title || `Q${idx + 1}`,
         index: idx,
         correctAnswers,
-        points: q.grading?.pointValue ?? 1,
+        points: stored?.points ?? 1,
         isGraded: correctAnswers.length > 0,
       };
     });
@@ -709,6 +723,7 @@ async function handleFormReport(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({ error: err.message || "Report failed" });
   }
 }
+
 // ─────────────────────────────────────────────────────────────────────────
 // Router — dispatches on ?action=... set by vercel.json
 // ─────────────────────────────────────────────────────────────────────────
