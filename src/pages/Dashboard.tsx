@@ -314,8 +314,6 @@ function FormCard({ form }: { form: FormDoc }) {
     ? (form.expiresAt.toDate ? form.expiresAt.toDate() : new Date(form.expiresAt)) < new Date()
     : false;
 
-  const isQuizForm = !!(form.isQuiz || form.quizMode);
-
   return (
     <div className="card p-4 transition hover:shadow-glow">
       <div className="flex items-start justify-between gap-3">
@@ -374,14 +372,12 @@ function FormCard({ form }: { form: FormDoc }) {
           <BarChart2 className="h-3.5 w-3.5" /> Analytics
         </button>
 
-        {isQuizForm && (
-          <button
-            onClick={() => nav(`/dashboard/report/${form.id}`)}
-            className="flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-ink/60 hover:bg-brand/5 hover:text-brand dark:text-[#F5EDE7]/60 transition"
-          >
-            <ClipboardList className="h-3.5 w-3.5" /> Report
-          </button>
-        )}
+        <button
+          onClick={() => nav(`/dashboard/report/${form.id}`)}
+          className="flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-ink/60 hover:bg-brand/5 hover:text-brand dark:text-[#F5EDE7]/60 transition"
+        >
+          <ClipboardList className="h-3.5 w-3.5" /> Report
+        </button>
 
         <div className="flex-1" />
 
