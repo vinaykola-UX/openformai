@@ -313,6 +313,88 @@ async function handleCreateForm(req: VercelRequest, res: VercelResponse) {
   return res.status(200).json({ formId, responderUri, editUri });
 }
 
+// ── action: "suggest-outlines" ───────────────────────────────────────────
+// Research-grounded quiz starting point. Takes a plain-language command,
+// uses Gemini's Google Search tool to research it, and returns two distinct
+// angles to choose from. Deliberately NOT combined with responseSchema in
+// the same call — gemini-2.5-flash-lite can't reliably do tool use +
+// schema-forced JSON together (that combo needs Gemini 3). Instead this
+// asks for a clearly delimited plain-text format and parses it locally,
+// which is both cheaper (one AI call) and easier to debug than a second
+// "structure this" AI call would be.
+
+function parseOutlines(raw: string): Array<{ title: string; angle: string; topics: string[]; content: string }> {
+  const outlines: Array<{ title: string; angle: string; topics: string[]; content: string }> = [];
+  const blocks = raw.split(/===OUTLINE_\d+===/).slice(1);
+  for (const block of blocks) {
+    const body = block.split(/===END_OUTLINE_\d+===/)[0];
+    const titleMatch = body.match(/TITLE:\s*(.+)/);
+    const angleMatch = body.match(/ANGLE:\s*(.+)/);
+    const topicsMatch = body.match(/TOPICS:\s*(.+)/);
+    const contentMatch = body.match(/CONTENT:\s*([\s\S]*)/);
+    if (!titleMatch || !contentMatch) continue;
+    outlines.push({
+      title: titleMatch[1].trim(),
+      angle: (angleMatch?.[1] || "").trim(),
+      topics: (topicsMatch?.[1] || "").split(",").map((t) => t.trim()).filter(Boolean),
+      content: contentMatch[1].trim(),
+    });
+  }
+  return outlines;
+}
+
+async function handleSuggestOutlines(req: VercelRequest, res: VercelResponse) {
+  await verifyAuth(req);
+  const { command } = (req.body || {}) as { command?: string };
+  if (!command || !command.trim()) {
+    return res.status(400).json({ error: "Missing command" });
+  }
+
+  const prompt = `You are a research assistant helping design a quiz or form. The user's request:
+"${command.trim()}"
+
+Use Google Search to research this topic thoroughly, then propose exactly TWO different angles or approaches for building content around it. The two options must be genuinely different in scope, angle, or emphasis — not near-duplicates of each other.
+
+Respond in EXACTLY this plain-text format, with no commentary before, between, or after the blocks:
+
+===OUTLINE_1===
+TITLE: <a short, specific title, under 60 characters>
+ANGLE: <one sentence explaining what makes this option distinct>
+TOPICS: <5 to 8 topics or subtopics, comma-separated>
+CONTENT:
+<3 to 6 solid paragraphs of real, factual, researched information on this angle, specific enough to write quiz questions from — no fluff, no filler>
+===END_OUTLINE_1===
+
+===OUTLINE_2===
+TITLE: <...>
+ANGLE: <...>
+TOPICS: <...>
+CONTENT:
+<...>
+===END_OUTLINE_2===`;
+
+  const response = await geminiWithFallback((ai) =>
+    ai.models.generateContent({
+      model: "gemini-2.5-flash-lite",
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      config: {
+        tools: [{ googleSearch: {} }],
+      },
+    })
+  );
+
+  const raw = response.text || "";
+  const outlines = parseOutlines(raw);
+
+  if (outlines.length === 0) {
+    return res.status(502).json({
+      error: "Couldn't organize the research into options — try rephrasing your request, or be more specific about the topic.",
+    });
+  }
+
+  return res.status(200).json({ outlines });
+}
+
 // ── Router ────────────────────────────────────────────────────────────────
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -324,6 +406,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return await handleAnalyze(req, res);
       case "generate":
         return await handleGenerate(req, res);
+      case "suggest-outlines":
+        return await handleSuggestOutlines(req, res);
       case "create-form":
         return await handleCreateForm(req, res);
       default:
