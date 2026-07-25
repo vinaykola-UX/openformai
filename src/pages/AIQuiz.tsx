@@ -290,8 +290,7 @@ export default function AIQuiz() {
             <ErrorCard error={error} onDismiss={() => setError("")} />
           </div>
         )}
-
-        {step === "input" && (
+{step === "input" && (
           <>
             <div className="card p-6 sm:p-8">
               <h2 className="font-display text-lg font-bold">1. Add study material</h2>
@@ -542,8 +541,6 @@ function ExportMenu({ onExport }: { onExport: (f: "json" | "txt" | "md" | "csv" 
     </div>
   );
 }
-
-
 function QuizCard({
   q, index, total, onChange, onDelete, onDuplicate, onMoveUp, onMoveDown,
 }: {
@@ -609,6 +606,12 @@ function QuizCard({
               className={`rounded-full px-3 py-1 text-xs font-semibold ${q.required ? "bg-brand text-white" : "bg-peach/40 text-brand-700"}`}>
               {q.required ? "Required" : "Optional"}
             </button>
+
+            {(q.correctAnswers || []).length === 0 && (
+              <span className="rounded-full bg-red-50 px-3 py-1 text-xs font-semibold text-red-600 dark:bg-red-950/30 dark:text-red-300">
+                ⚠ No answer set
+              </span>
+            )}
           </div>
 
           {hasOptions && (
