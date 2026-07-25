@@ -54,6 +54,11 @@ export type QuizQuestion = {
 export const analyzeMaterial = (text: string) =>
   call<QuizAnalysis>("/api/quiz", "analyze", { text });
 
+export type QuizOutline = { title: string; angle: string; topics: string[]; content: string };
+
+export const suggestOutlines = (command: string) =>
+  call<{ outlines: QuizOutline[] }>("/api/quiz", "suggest-outlines", { command });
+
 export const generateQuiz = (opts: {
   text: string;
   count: number;
