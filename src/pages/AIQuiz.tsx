@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import {
   ArrowLeft, Upload, Link2, Loader2, Sparkles, Wand2, Brain,
   CheckCircle2, ExternalLink, BookOpen, Target, Plus, Trash2,
-  Copy, ChevronDown, Download,
+  Copy, ChevronDown, Download, Globe,
 } from "lucide-react";
 import AppShell from "../components/AppShell";
 import ErrorCard from "../components/ErrorCard";
@@ -11,8 +11,8 @@ import CopyLinkButton from "../components/CopyLinkButton";
 import UnlockDialog from "../components/UnlockDialog";
 import { extractFileText, extractDriveUrl } from "../lib/api";
 import {
-  analyzeMaterial, generateQuiz, createQuizForm,
-  type QuizAnalysis, type QuizQuestion,
+  analyzeMaterial, generateQuiz, createQuizForm, suggestOutlines,
+  type QuizAnalysis, type QuizQuestion, type QuizOutline,
 } from "../lib/quizApi";
 
 type Step = "input" | "review" | "result";
@@ -41,6 +41,10 @@ export default function AIQuiz() {
 
   const [analysis, setAnalysis] = useState<QuizAnalysis | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
+
+  const [command, setCommand] = useState("");
+  const [researching, setResearching] = useState(false);
+  const [outlines, setOutlines] = useState<QuizOutline[] | null>(null);
 
   const [count, setCount] = useState<number>(10);
   const [customCount, setCustomCount] = useState<string>("");
@@ -87,10 +91,11 @@ export default function AIQuiz() {
     }
   }
 
-  async function runAnalyze() {
+  async function runAnalyze(overrideText?: string) {
+    const material = overrideText ?? text;
     setError(""); setAnalyzing(true);
     try {
-      const a = await analyzeMaterial(text);
+      const a = await analyzeMaterial(material);
       setAnalysis(a);
       if (a.mainTopic) setTitle(`${a.mainTopic} — Quiz`);
     } catch (err: any) {
@@ -98,6 +103,26 @@ export default function AIQuiz() {
     } finally {
       setAnalyzing(false);
     }
+  }
+
+  async function runResearch() {
+    if (!command.trim()) return;
+    setError(""); setResearching(true); setOutlines(null);
+    try {
+      const { outlines: found } = await suggestOutlines(command.trim());
+      setOutlines(found);
+    } catch (err: any) {
+      setError(err.message || "Research failed");
+    } finally {
+      setResearching(false);
+    }
+  }
+
+  function pickOutline(o: QuizOutline) {
+    setText(o.content);
+    setOutlines(null);
+    if (o.title) setTitle(`${o.title} — Quiz`);
+    runAnalyze(o.content);
   }
 
   async function runGenerate() {
@@ -293,6 +318,44 @@ export default function AIQuiz() {
 {step === "input" && (
           <>
             <div className="card p-6 sm:p-8">
+              <h2 className="font-display text-lg font-bold flex items-center gap-2">
+                <Globe className="h-4 w-4 text-brand" /> Or describe what you want
+              </h2>
+              <p className="mt-1 text-xs text-ink/60 dark:text-[#F5EDE7]/60">
+                Skip pasting material — tell it what to make and it'll research the web and propose two starting points to pick from.
+              </p>
+              <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                <input value={command} onChange={(e) => setCommand(e.target.value)}
+                  placeholder='e.g. "Make a quiz on BR23 workplace safety regulations"'
+                  className="input flex-1" />
+                <button type="button" onClick={runResearch} disabled={!command.trim() || researching} className="btn-primary shrink-0">
+                  {researching ? <><Loader2 className="h-4 w-4 animate-spin" /> Researching...</> : <><Globe className="h-4 w-4" /> Research</>}
+                </button>
+              </div>
+
+              {outlines && outlines.length > 0 && (
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  {outlines.map((o, i) => (
+                    <div key={i} className="rounded-2xl border border-brand/15 bg-cream/60 p-4 dark:border-white/10 dark:bg-white/5">
+                      <p className="text-sm font-bold text-ink dark:text-[#F5EDE7]">{o.title}</p>
+                      <p className="mt-1 text-xs text-ink/60 dark:text-[#F5EDE7]/60">{o.angle}</p>
+                      {o.topics.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          {o.topics.map((t, j) => (
+                            <span key={j} className="rounded-full bg-peach/40 px-2 py-0.5 text-[10px] text-brand-700">{t}</span>
+                          ))}
+                        </div>
+                      )}
+                      <button type="button" onClick={() => pickOutline(o)} className="btn-secondary mt-3 w-full">
+                        Use this
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="card mt-6 p-6 sm:p-8">
               <h2 className="font-display text-lg font-bold">1. Add study material</h2>
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 <div className="rounded-2xl border border-dashed border-brand/20 bg-cream/60 p-4 dark:border-white/10 dark:bg-white/5">
@@ -326,7 +389,7 @@ export default function AIQuiz() {
                   placeholder="Paste notes, textbook excerpts, articles..."
                   className="input font-mono text-xs leading-relaxed" />
               </div>
-              <button onClick={runAnalyze} disabled={!text.trim() || analyzing} className="btn-primary mt-4">
+              <button onClick={() => runAnalyze()} disabled={!text.trim() || analyzing} className="btn-primary mt-4">
                 {analyzing ? <><Sparkles className="h-4 w-4 animate-pulse" /> Analyzing...</> : <><BookOpen className="h-4 w-4" /> Analyze content</>}
               </button>
             </div>
