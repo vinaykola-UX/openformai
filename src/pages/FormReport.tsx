@@ -5,6 +5,7 @@ import {
   ArrowLeft, Loader2, FileSpreadsheet,
   FileText, Users, Trophy, TrendingUp,
   AlertTriangle, Download, BarChart2,
+  CalendarDays, CalendarRange,
 } from "lucide-react";
 import Navbar from "../components/Navbar";
 import { useAuth } from "../contexts/AuthContext";
@@ -48,6 +49,71 @@ async function getAuthHeader() {
   return `Bearer ${token}`;
 }
 
+// ── Date filter helpers ─────────────────────────────────────────────────────
+type DateMode = "all" | "today" | "yesterday" | "week" | "last7" | "last10" | "custom" | "range";
+
+const DATE_MODE_LABELS: Record<DateMode, string> = {
+  all: "All time",
+  today: "Today",
+  yesterday: "Yesterday",
+  week: "This week",
+  last7: "Last 7 days",
+  last10: "Last 10 days",
+  custom: "Custom date",
+  range: "Custom range",
+};
+
+function startOfDay(d: Date) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+}
+function endOfDay(d: Date) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999).getTime();
+}
+
+/** Returns [startMs, endMs] (inclusive) for the given mode, or null for "all". */
+function dateRangeFor(
+  mode: DateMode,
+  customDate: string,
+  rangeStart: string,
+  rangeEnd: string
+): [number, number] | null {
+  const now = new Date();
+  switch (mode) {
+    case "today":
+      return [startOfDay(now), endOfDay(now)];
+    case "yesterday": {
+      const y = new Date(now); y.setDate(y.getDate() - 1);
+      return [startOfDay(y), endOfDay(y)];
+    }
+    case "week": {
+      const start = new Date(now);
+      start.setDate(start.getDate() - start.getDay()); // back to Sunday
+      return [startOfDay(start), endOfDay(now)];
+    }
+    case "last7": {
+      const start = new Date(now); start.setDate(start.getDate() - 6);
+      return [startOfDay(start), endOfDay(now)];
+    }
+    case "last10": {
+      const start = new Date(now); start.setDate(start.getDate() - 9);
+      return [startOfDay(start), endOfDay(now)];
+    }
+    case "custom": {
+      if (!customDate) return null;
+      const d = new Date(customDate + "T00:00:00");
+      return [startOfDay(d), endOfDay(d)];
+    }
+    case "range": {
+      if (!rangeStart || !rangeEnd) return null;
+      const s = new Date(rangeStart + "T00:00:00");
+      const e = new Date(rangeEnd + "T00:00:00");
+      return [startOfDay(s), endOfDay(e)];
+    }
+    default:
+      return null;
+  }
+}
+
 function gradeColor(pct: number) {
   if (pct >= 90) return "text-green-600 dark:text-green-400";
   if (pct >= 75) return "text-brand";
@@ -70,6 +136,10 @@ export default function FormReport() {
   const [report, setReport] = useState<ReportData | null>(null);
   const [activeBranch, setActiveBranch] = useState<string>("ALL");
   const [exporting, setExporting] = useState<"pdf" | "excel" | null>(null);
+  const [dateMode, setDateMode] = useState<DateMode>("all");
+  const [customDate, setCustomDate] = useState("");
+  const [rangeStart, setRangeStart] = useState("");
+  const [rangeEnd, setRangeEnd] = useState("");
   const printRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -130,7 +200,7 @@ export default function FormReport() {
         ]),
       ];
       const wsAll = XLSX.utils.aoa_to_sheet(overallData);
-      XLSX.utils.book_append_sheet(wb, wsAll, "All Students");
+XLSX.utils.book_append_sheet(wb, wsAll, "All Students");
 
       // Per-branch sheets
       report.branches.forEach(branch => {
@@ -162,9 +232,31 @@ export default function FormReport() {
     window.print();
   }
 
-  const displayStudents = activeBranch === "ALL"
+  const branchStudents = activeBranch === "ALL"
     ? report?.students || []
     : report?.byBranch[activeBranch] || [];
+
+  const activeRange = dateRangeFor(dateMode, customDate, rangeStart, rangeEnd);
+
+  const displayStudents = activeRange
+    ? branchStudents.filter(s => {
+        const t = new Date(s.submittedAt).getTime();
+        return t >= activeRange[0] && t <= activeRange[1];
+      })
+    : branchStudents;
+
+  const periodStats = (() => {
+    const n = displayStudents.length;
+    if (n === 0) return { count: 0, avg: 0, highest: 0, lowest: 0, passed: 0 };
+    const sum = displayStudents.reduce((s, r) => s + r.percentage, 0);
+    return {
+      count: n,
+      avg: Math.round(sum / n),
+      highest: Math.max(...displayStudents.map(r => r.percentage)),
+      lowest: Math.min(...displayStudents.map(r => r.percentage)),
+      passed: displayStudents.filter(r => r.percentage >= 50).length,
+    };
+  })();
 
   return (
     <>
@@ -281,6 +373,98 @@ export default function FormReport() {
                 </div>
               </div>
 
+              {/* Date filter */}
+              <div className="no-print card p-4">
+                <div className="mb-3 flex items-center gap-2 text-sm font-bold">
+                  <CalendarDays className="h-4 w-4 text-brand" /> Filter by date
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {(["all", "today", "yesterday", "week", "last7", "last10"] as DateMode[]).map(m => (
+                    <button
+                      key={m}
+                      onClick={() => setDateMode(m)}
+                      className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                        dateMode === m
+                          ? "bg-brand text-white"
+                          : "bg-cream text-ink/60 hover:bg-brand/10 dark:bg-white/5 dark:text-[#F5EDE7]/60"
+                      }`}
+                    >
+                      {DATE_MODE_LABELS[m]}
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => setDateMode("custom")}
+                    className={`flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                      dateMode === "custom"
+                        ? "bg-brand text-white"
+                        : "bg-cream text-ink/60 hover:bg-brand/10 dark:bg-white/5 dark:text-[#F5EDE7]/60"
+                    }`}
+                  >
+                    <CalendarDays className="h-3.5 w-3.5" /> Pick a date
+                  </button>
+<button
+                    onClick={() => setDateMode("range")}
+                    className={`flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                      dateMode === "range"
+                        ? "bg-brand text-white"
+                        : "bg-cream text-ink/60 hover:bg-brand/10 dark:bg-white/5 dark:text-[#F5EDE7]/60"
+                    }`}
+                  >
+                    <CalendarRange className="h-3.5 w-3.5" /> Date range
+                  </button>
+                </div>
+
+                {dateMode === "custom" && (
+                  <div className="mt-3">
+                    <input
+                      type="date"
+                      value={customDate}
+                      onChange={(e) => setCustomDate(e.target.value)}
+                      className="input w-full sm:w-56"
+                    />
+                  </div>
+                )}
+                {dateMode === "range" && (
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <input
+                      type="date"
+                      value={rangeStart}
+                      onChange={(e) => setRangeStart(e.target.value)}
+                      className="input w-full sm:w-48"
+                    />
+                    <span className="text-xs text-ink/50">to</span>
+                    <input
+                      type="date"
+                      value={rangeEnd}
+                      onChange={(e) => setRangeEnd(e.target.value)}
+                      className="input w-full sm:w-48"
+                    />
+                  </div>
+                )}
+
+                {/* Period summary — only when a filter narrower than "all" is active */}
+                {dateMode !== "all" && (
+                  <div className="mt-4 grid grid-cols-2 gap-2 border-t border-brand/5 pt-3 dark:border-white/5 sm:grid-cols-4">
+                    <div>
+                      <p className="text-xs text-ink/50 uppercase tracking-wide">Filled</p>
+                      <p className="font-display text-lg font-bold">{periodStats.count}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-ink/50 uppercase tracking-wide">Avg score</p>
+                      <p className="font-display text-lg font-bold">{periodStats.avg}%</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-ink/50 uppercase tracking-wide">Highest</p>
+                      <p className="font-display text-lg font-bold">{periodStats.highest}%</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-ink/50 uppercase tracking-wide">Passed</p>
+                      <p className="font-display text-lg font-bold">{periodStats.passed}/{periodStats.count}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* Branch tabs */}
               {report.branches.length > 1 && (
                 <div className="no-print flex flex-wrap gap-2">
@@ -312,6 +496,14 @@ export default function FormReport() {
                   <p className="font-bold">No responses yet</p>
                   <p className="text-sm text-ink/60">
                     Share the form link with students. Results will appear here once they submit.
+                  </p>
+                </div>
+              ) : displayStudents.length === 0 ? (
+                <div className="card flex flex-col items-center gap-3 p-12 text-center">
+                  <CalendarDays className="h-10 w-10 text-ink/20" />
+                  <p className="font-bold">No responses in this period</p>
+                  <p className="text-sm text-ink/60">
+                    Try a different date, range, or select "All time".
                   </p>
                 </div>
               ) : (
