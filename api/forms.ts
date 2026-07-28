@@ -345,7 +345,6 @@ async function handleCreateForm(req: VercelRequest, res: VercelResponse) {
 // ─────────────────────────────────────────────────────────────────────────
 // action: "delete-form"
 // ─────────────────────────────────────────────────────────────────────────
-
 async function handleDeleteForm(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "DELETE")
     return res.status(405).json({ error: "Method not allowed" });
@@ -725,6 +724,187 @@ async function handleFormReport(req: VercelRequest, res: VercelResponse) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
+// action: "overall-review"
+// Aggregates graded results across ALL of the user's quiz forms, matching
+// students by roll number (fallback: name) so a single student's performance
+// can be reviewed across many different quizzes.
+// ─────────────────────────────────────────────────────────────────────────
+function normalizeKey(rollNo: string, name: string): string {
+  const r = (rollNo || "").replace(/[^a-z0-9]/gi, "").toUpperCase();
+  if (r) return `R:${r}`;
+  const n = (name || "").trim().toLowerCase().replace(/\s+/g, " ");
+  return `N:${n}`;
+}
+
+async function handleOverallReport(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== "POST")
+    return res.status(405).json({ error: "Method not allowed" });
+
+  try {
+    const { uid } = await verifyAuth(req);
+    const { db } = getAdmin();
+
+    const userSnap = await db.collection("users").doc(uid).get();
+    const refreshToken = userSnap.data()?.googleRefreshToken;
+    if (!refreshToken)
+      return res.status(400).json({ error: "Google account not connected." });
+
+    const formsQuery = await db
+      .collection("forms")
+      .where("uid", "==", uid)
+      .orderBy("createdAt", "desc")
+      .limit(30)
+      .get();
+
+    if (formsQuery.empty) {
+      return res.status(200).json({
+        quizzesAnalyzed: 0, totalStudents: 0, avgAcrossAll: 0, students: [],
+      });
+    }
+
+    const client = oauthClient();
+    client.setCredentials({ refresh_token: refreshToken });
+    const forms = google.forms({ version: "v1", auth: client });
+
+    type StudentAgg = {
+      key: string;
+      name: string;
+      rollNo: string;
+      branch: string;
+      quizzes: Array<{
+        formId: string; formTitle: string; percentage: number;
+        correct: number; totalQuestions: number; submittedAt: string;
+      }>;
+    };
+    const studentMap = new Map<string, StudentAgg>();
+    let quizzesAnalyzed = 0;
+
+    await Promise.all(formsQuery.docs.map(async (formDoc) => {
+      const storedForm = formDoc.data();
+      const googleFormId = storedForm.googleFormId;
+      if (!googleFormId) return;
+
+      const storedQuestions: Array<{ title?: string; correctAnswers?: string[]; points?: number }> =
+        Array.isArray(storedForm.questions) ? storedForm.questions : [];
+
+      let formRes, responsesRes;
+      try {
+        [formRes, responsesRes] = await Promise.all([
+          forms.forms.get({ formId: googleFormId }),
+          forms.forms.responses.list({ formId: googleFormId }),
+        ]);
+      } catch {
+        return; // skip forms we can no longer reach
+      }
+
+      const items = formRes.data.items || [];
+      const questionMap: Record<string, {
+        title: string; correctAnswers: string[]; points: number; isGraded: boolean;
+      }> = {};
+
+      items.forEach((item: any, idx: number) => {
+        const q = item.questionItem?.question;
+        if (!q) return;
+        const stored = storedQuestions[idx];
+        const correctAnswers = (stored?.correctAnswers || [])
+          .map((a: any) => String(a).toLowerCase().trim())
+          .filter(Boolean);
+        questionMap[q.questionId] = {
+          title: item.title || stored?.title || `Q${idx + 1}`,
+          correctAnswers,
+          points: stored?.points ?? 1,
+          isGraded: correctAnswers.length > 0,
+        };
+      });
+
+      const gradedEntries = Object.entries(questionMap).filter(([, q]) => q.isGraded);
+      if (gradedEntries.length === 0) return; // not a graded quiz — skip
+
+      quizzesAnalyzed++;
+      const formTitle = formRes.data.info?.title || storedForm.title || "Quiz";
+      const allResponses = responsesRes.data.responses || [];
+
+      allResponses.forEach((r: any) => {
+        const answers = r.answers || {};
+        let name = "", rollNo = "", branch = "";
+        Object.entries(questionMap).forEach(([qId, qInfo]) => {
+          const ans = answers[qId]?.textAnswers?.answers?.[0]?.value || "";
+          const title = qInfo.title.toLowerCase();
+          if (title.includes("name") && !title.includes("roll")) name = ans;
+          if (title.includes("roll")) rollNo = ans;
+          if (title.includes("branch") || title.includes("dept") || title.includes("department")) branch = ans;
+        });
+
+        let correct = 0;
+        gradedEntries.forEach(([qId, qInfo]) => {
+          const studentAns = answers[qId];
+          if (!studentAns) return;
+          const textAnswers = studentAns.textAnswers?.answers?.map((a: any) =>
+            a.value.toLowerCase().trim()
+          ) || [];
+          if (qInfo.correctAnswers.some(ca => textAnswers.includes(ca))) correct++;
+        });
+
+        const totalQuestions = gradedEntries.length;
+        const percentage = totalQuestions > 0 ? Math.round((correct / totalQuestions) * 100) : 0;
+        const key = normalizeKey(rollNo, name);
+
+        if (!studentMap.has(key)) {
+          studentMap.set(key, { key, name: name || "Unknown", rollNo: rollNo || "—", branch: branch || "—", quizzes: [] });
+        }
+        const agg = studentMap.get(key)!;
+        if (!agg.rollNo || agg.rollNo === "—") agg.rollNo = rollNo || agg.rollNo;
+        if (!agg.name || agg.name === "Unknown") agg.name = name || agg.name;
+        if ((!agg.branch || agg.branch === "—") && branch) agg.branch = branch;
+        agg.quizzes.push({
+          formId: formDoc.id, formTitle, percentage, correct, totalQuestions,
+          submittedAt: r.lastSubmittedTime,
+        });
+      });
+    }));
+
+    const students = Array.from(studentMap.values()).map(s => {
+      const pcts = s.quizzes.map(q => q.percentage);
+      const attempts = pcts.length;
+      const avgPercentage = attempts > 0 ? Math.round(pcts.reduce((a, b) => a + b, 0) / attempts) : 0;
+      const best = attempts > 0 ? Math.max(...pcts) : 0;
+      const worst = attempts > 0 ? Math.min(...pcts) : 0;
+
+      // Trend: compare first half vs second half average (needs 2+ quizzes)
+      let trend: "improving" | "declining" | "stable" | "n/a" = "n/a";
+      if (attempts >= 2) {
+        const sorted = [...s.quizzes].sort(
+          (a, b) => new Date(a.submittedAt).getTime() - new Date(b.submittedAt).getTime()
+        );
+        const mid = Math.ceil(sorted.length / 2);
+        const firstAvg = sorted.slice(0, mid).reduce((sum, q) => sum + q.percentage, 0) / mid;
+        const secondAvg = sorted.slice(mid).reduce((sum, q) => sum + q.percentage, 0) / (sorted.length - mid || 1);
+        const diff = secondAvg - firstAvg;
+        trend = diff > 5 ? "improving" : diff < -5 ? "declining" : "stable";
+      }
+
+      return {
+        rollNo: s.rollNo, name: s.name, branch: s.branch,
+        attempts, avgPercentage, best, worst, trend,
+        quizzes: s.quizzes.sort(
+          (a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime()
+        ),
+      };
+    }).sort((a, b) => b.avgPercentage - a.avgPercentage);
+
+    const totalStudents = students.length;
+    const avgAcrossAll = totalStudents > 0
+      ? Math.round(students.reduce((s, r) => s + r.avgPercentage, 0) / totalStudents)
+      : 0;
+
+    return res.status(200).json({ quizzesAnalyzed, totalStudents, avgAcrossAll, students });
+  } catch (err: any) {
+    console.error("overall-review error", err);
+    return res.status(500).json({ error: err.message || "Overall review failed" });
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
 // Router — dispatches on ?action=... set by vercel.json
 // ─────────────────────────────────────────────────────────────────────────
 
@@ -741,6 +921,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return handleFormAnalytics(req, res);
     case "form-report":
       return handleFormReport(req, res);
+    case "overall-review":
+      return handleOverallReport(req, res);
     default:
       return res.status(400).json({ error: `Unknown or missing action: ${action}` });
   }
