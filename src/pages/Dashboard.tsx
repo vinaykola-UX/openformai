@@ -96,6 +96,13 @@ const QUICK_ACTIONS: QuickAction[] = [
     iconBg: "bg-gradient-to-br from-emerald-500 to-teal-500",
   },
   {
+    to: "/dashboard/overall-review",
+    icon: <BarChart2 className="h-5 w-5" />,
+    title: "Overall Review",
+    subtitle: "Cross-quiz student analysis",
+    iconBg: "bg-gradient-to-br from-rose-500 to-pink-500",
+  },
+  {
     to: "/connect-google",
     icon: <Link2 className="h-5 w-5" />,
     title: "Google Account",
@@ -141,7 +148,7 @@ export default function Dashboard() {
     const unsub = onSnapshot(
       baseQ,
       (snap) => { setForms(mapDocs(snap)); setLoading(false); },
-      (err) => { console.error("[dashboard] forms snapshot failed", err); setLoading(false); }
+(err) => { console.error("[dashboard] forms snapshot failed", err); setLoading(false); }
     );
     return () => unsub();
   }, [user]);
