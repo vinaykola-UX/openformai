@@ -16,6 +16,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import FormAnalytics from "./pages/FormAnalytics";
 import FormPreview from "./pages/FormPreview";
 import FormReport from "./pages/FormReport";
+import OverallReview from "./pages/OverallReview";
 
 export default function App() {
   return (
@@ -76,6 +77,14 @@ export default function App() {
         element={
           <ProtectedRoute>
             <FormReport />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/overall-review"
+        element={
+          <ProtectedRoute>
+            <OverallReview />
           </ProtectedRoute>
         }
       />
