@@ -258,7 +258,12 @@ async function handleCreateForm(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
   try {
     const { uid } = await verifyAuth(req);
-    const { title, questions, expiresAt } = req.body as { title: string; questions: Question[]; expiresAt?: string | null };
+    const { title, questions, expiresAt, expectedStudents } = req.body as {
+      title: string;
+      questions: Question[];
+      expiresAt?: string | null;
+      expectedStudents?: string[];
+    };
     if (!title || !Array.isArray(questions) || !questions.length) {
       return res.status(400).json({ error: "Missing title or questions" });
     }
@@ -331,6 +336,7 @@ async function handleCreateForm(req: VercelRequest, res: VercelResponse) {
       questionCount: questions.length,
       questions,
       isQuiz: false,
+      expectedStudents: dedupeRolls(Array.isArray(expectedStudents) ? expectedStudents : []),
       expiresAt: expiresAt ? new Date(expiresAt) : null,
       createdAt: FieldValue.serverTimestamp(),
     });
@@ -904,6 +910,153 @@ async function handleOverallReport(req: VercelRequest, res: VercelResponse) {
   }
 }
 
+
+// ─────────────────────────────────────────────────────────────────────────
+// Response Tracker helpers
+// ─────────────────────────────────────────────────────────────────────────
+
+function normalizeRoll(value: string): string {
+  return String(value ?? "").trim().replace(/\s+/g, "").toUpperCase();
+}
+
+function dedupeRolls(list: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const item of list || []) {
+    const key = normalizeRoll(item);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(String(item).trim());
+  }
+  return out;
+}
+
+const ROLL_FIELD_REGEX =
+  /(roll|register|registration|regd|reg\.?\s*(no|num)|htno|hall\s*ticket|admission\s*(no|number))/i;
+
+// action: "expected-students" — replace the imported list for an existing form
+async function handleExpectedStudents(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+  try {
+    const { uid } = await verifyAuth(req);
+    const { formId, expectedStudents } = req.body as { formId: string; expectedStudents: string[] };
+    if (!formId) return res.status(400).json({ error: "Missing formId" });
+
+    const { db } = getAdmin();
+    const snap = await db.collection("forms").doc(formId).get();
+    if (!snap.exists) return res.status(404).json({ error: "Form not found" });
+    if (snap.data()?.uid !== uid) return res.status(403).json({ error: "Not authorized" });
+
+    const list = dedupeRolls(Array.isArray(expectedStudents) ? expectedStudents : []);
+    await db.collection("forms").doc(formId).update({ expectedStudents: list });
+    return res.status(200).json({ ok: true, totalStudents: list.length });
+  } catch (err: any) {
+    console.error("expected-students error", err);
+    return res.status(500).json({ error: err.message || "Failed to save student list" });
+  }
+}
+
+// action: "response-tracker" — expected students minus submitted students
+async function handleResponseTracker(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+  try {
+    const { uid } = await verifyAuth(req);
+    const { formId } = req.body as { formId: string };
+    if (!formId) return res.status(400).json({ error: "Missing formId" });
+
+    const { db } = getAdmin();
+    const snap = await db.collection("forms").doc(formId).get();
+    if (!snap.exists) return res.status(404).json({ error: "Form not found" });
+    const data = snap.data() || {};
+    if (data.uid !== uid) return res.status(403).json({ error: "Not authorized" });
+
+    const expected: string[] = dedupeRolls(data.expectedStudents || []);
+    const googleFormId = data.googleFormId;
+
+    if (!expected.length) {
+      return res.status(200).json({
+        hasExpectedList: false,
+        rollFieldTitle: null,
+        totalStudents: 0,
+        respondedCount: 0,
+        notRespondedCount: 0,
+        responded: [],
+        notResponded: [],
+        unknownSubmissions: [],
+        totalResponses: 0,
+      });
+    }
+    if (!googleFormId) return res.status(400).json({ error: "This form has no linked Google Form ID." });
+
+    const userSnap = await db.collection("users").doc(uid).get();
+    const refreshToken = userSnap.data()?.googleRefreshToken;
+    if (!refreshToken)
+      return res.status(400).json({ error: "Google account not connected. Visit /connect-google." });
+
+    const client = oauthClient();
+    client.setCredentials({ refresh_token: refreshToken });
+    const forms = google.forms({ version: "v1", auth: client });
+
+    const [formRes, responsesRes] = await Promise.all([
+      forms.forms.get({ formId: googleFormId }),
+      forms.forms.responses.list({ formId: googleFormId }),
+    ]);
+
+    const items = (formRes.data.items || []).filter(
+      (i: any) => i.questionItem?.question?.questionId
+    );
+    const rollItem =
+      items.find((i: any) => ROLL_FIELD_REGEX.test(i.title || "")) || null;
+
+    const allResponses = responsesRes.data.responses || [];
+    const submittedRaw: string[] = [];
+
+    for (const r of allResponses as any[]) {
+      const answers = r.answers || {};
+      if (rollItem) {
+        const a = answers[rollItem.questionItem.question.questionId];
+        const v = a?.textAnswers?.answers?.[0]?.value;
+        if (v) submittedRaw.push(v);
+      } else {
+        // No dedicated roll field: scan every text answer for a match later
+        for (const key of Object.keys(answers)) {
+          const v = answers[key]?.textAnswers?.answers?.[0]?.value;
+          if (v) submittedRaw.push(v);
+        }
+      }
+    }
+
+    const expectedMap = new Map<string, string>();
+    expected.forEach((e) => expectedMap.set(normalizeRoll(e), e));
+
+    const submittedSet = new Set(submittedRaw.map(normalizeRoll).filter(Boolean));
+
+    const responded: string[] = [];
+    const notResponded: string[] = [];
+    for (const [key, original] of expectedMap) {
+      if (submittedSet.has(key)) responded.push(original);
+      else notResponded.push(original);
+    }
+
+    const unknownSubmissions = Array.from(submittedSet).filter((s) => !expectedMap.has(s));
+
+    return res.status(200).json({
+      hasExpectedList: true,
+      rollFieldTitle: rollItem?.title || null,
+      totalStudents: expectedMap.size,
+      respondedCount: responded.length,
+      notRespondedCount: notResponded.length,
+      responded,
+      notResponded,
+      unknownSubmissions: rollItem ? unknownSubmissions : [],
+      totalResponses: allResponses.length,
+    });
+  } catch (err: any) {
+    console.error("response-tracker error", err);
+    return res.status(500).json({ error: err.message || "Response tracker failed" });
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 // Router — dispatches on ?action=... set by vercel.json
 // ─────────────────────────────────────────────────────────────────────────
@@ -919,6 +1072,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return handlePreviewForm(req, res);
     case "form-analytics":
       return handleFormAnalytics(req, res);
+    case "response-tracker":
+      return handleResponseTracker(req, res);
+    case "expected-students":
+      return handleExpectedStudents(req, res);
     case "form-report":
       return handleFormReport(req, res);
     case "overall-review":
