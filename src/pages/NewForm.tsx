@@ -13,6 +13,8 @@ import QuestionPreview from "../components/QuestionPreview";
 import QuestionEditor from "../components/QuestionEditor";
 import CopyLinkButton from "../components/CopyLinkButton";
 import UnlockDialog from "../components/UnlockDialog";
+import StudentImport from "../components/StudentImport";
+import { ROLL_FIELD_REGEX } from "../lib/rollNumbers";
 
 // ─── Templates ────────────────────────────────────────────────────────────────
 
@@ -138,6 +140,7 @@ export default function NewForm() {
   const [error, setError] = useState("");
   const [editMode, setEditMode] = useState(false);
   const [expiresAt, setExpiresAt] = useState("");
+  const [expectedStudents, setExpectedStudents] = useState<string[]>([]);
   const [result, setResult] = useState<{
     responderUri: string;
     editUri: string;
@@ -232,7 +235,7 @@ export default function NewForm() {
     setError("");
     setCreating(true);
     try {
-      const r = await createForm(title, questions, expiresAt || null);
+      const r = await createForm(title, questions, expiresAt || null, expectedStudents);
       setResult(r as any);
     } catch (err: any) {
       if (err?.code === "LIMIT_REACHED" || err?.code === "DAILY_LIMIT_REACHED") {
@@ -433,6 +436,15 @@ export default function NewForm() {
                 </p>
               )}
             </div>
+
+            <StudentImport students={expectedStudents} onChange={setExpectedStudents} />
+
+            {expectedStudents.length > 0 &&
+              !(questions || []).some((q) => ROLL_FIELD_REGEX.test(q.title || "")) && (
+                <p className="rounded-xl border border-amber-300/60 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-500/30 dark:bg-amber-950/30 dark:text-amber-200">
+                  ⚠ Add a “Roll number” question so responses can be matched to your imported students.
+                </p>
+              )}
 
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="rounded-2xl border border-dashed border-brand/20 bg-cream/60 p-4 dark:border-white/10 dark:bg-white/5">

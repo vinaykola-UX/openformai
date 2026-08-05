@@ -17,6 +17,8 @@ import AppShell from "../components/AppShell";
 import { useAuth } from "../contexts/AuthContext";
 import { db } from "../lib/firebase";
 import { auth, waitForAuthReady } from "../lib/firebase";
+import StudentImport from "../components/StudentImport";
+import { getResponseTracker, updateExpectedStudents, type ResponseTracker } from "../lib/api";
 
 
 type QuestionStat = {
@@ -52,11 +54,48 @@ export default function FormAnalytics() {
   const [error, setError] = useState("");
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [formTitle, setFormTitle] = useState("");
+  const [tracker, setTracker] = useState<ResponseTracker | null>(null);
+  const [trackerLoading, setTrackerLoading] = useState(true);
+  const [trackerError, setTrackerError] = useState("");
+  const [trackerTab, setTrackerTab] = useState<"not" | "yes">("not");
+  const [importOpen, setImportOpen] = useState(false);
+  const [draftStudents, setDraftStudents] = useState<string[]>([]);
+  const [savingStudents, setSavingStudents] = useState(false);
 
   useEffect(() => {
     if (!formId || !user) return;
     loadAnalytics();
+    loadTracker();
   }, [formId, user]);
+
+  async function loadTracker() {
+    if (!formId) return;
+    setTrackerLoading(true);
+    setTrackerError("");
+    try {
+      const data = await getResponseTracker(formId);
+      setTracker(data);
+    } catch (e: any) {
+      setTrackerError(e.message || "Could not load response tracker.");
+    } finally {
+      setTrackerLoading(false);
+    }
+  }
+
+  async function saveStudents() {
+    if (!formId) return;
+    setSavingStudents(true);
+    try {
+      await updateExpectedStudents(formId, draftStudents);
+      setImportOpen(false);
+      setDraftStudents([]);
+      await loadTracker();
+    } catch (e: any) {
+      setTrackerError(e.message || "Could not save student list.");
+    } finally {
+      setSavingStudents(false);
+    }
+  }
 
   async function loadAnalytics() {
     setLoading(true);
@@ -228,6 +267,146 @@ export default function FormAnalytics() {
             </p>
           </div>
         </div>
+
+        {/* ── Response Tracker ── */}
+        <section className="mb-6">
+          {trackerLoading && (
+            <div className="card flex items-center gap-3 p-5 text-sm text-ink/60 dark:text-[#F5EDE7]/60">
+              <Loader2 className="h-4 w-4 animate-spin" /> Checking student responses...
+            </div>
+          )}
+
+          {!trackerLoading && trackerError && (
+            <div className="card p-5 text-sm text-red-700 dark:text-red-300">
+              {trackerError}
+              <button onClick={loadTracker} className="btn-secondary ml-3">Retry</button>
+            </div>
+          )}
+
+          {!trackerLoading && !trackerError && tracker && !tracker.hasExpectedList && (
+            <div className="card p-5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="font-display text-lg font-bold">Response tracker</h2>
+                  <p className="text-sm text-ink/60 dark:text-[#F5EDE7]/60">
+                    Import your student roll numbers to see who hasn&apos;t responded.
+                  </p>
+                </div>
+                <button onClick={() => setImportOpen((o) => !o)} className="btn-secondary">
+                  <Users className="h-4 w-4" /> {importOpen ? "Cancel" : "Import student data"}
+                </button>
+              </div>
+              {importOpen && (
+                <div className="mt-4 space-y-3">
+                  <StudentImport students={draftStudents} onChange={setDraftStudents} />
+                  <button
+                    onClick={saveStudents}
+                    disabled={!draftStudents.length || savingStudents}
+                    className="btn-primary"
+                  >
+                    {savingStudents ? "Saving..." : `Save ${draftStudents.length} students`}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {!trackerLoading && !trackerError && tracker?.hasExpectedList && (
+            <div className="card overflow-hidden p-0">
+              <div className="border-b border-brand/10 p-5 dark:border-white/10">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <h2 className="font-display text-lg font-bold">Response tracker</h2>
+                  <button onClick={loadTracker} className="btn-ghost text-xs">🔄 Refresh</button>
+                </div>
+                {!tracker.rollFieldTitle && (
+                  <p className="mt-2 rounded-xl border border-amber-300/60 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-500/30 dark:bg-amber-950/30 dark:text-amber-200">
+                    ⚠ No Roll / Register number question found in this form — matching against all text answers.
+                  </p>
+                )}
+
+                <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-2xl border border-brand/10 bg-cream/60 p-4 dark:border-white/10 dark:bg-white/5">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-ink/60 dark:text-[#F5EDE7]/60">
+                      Total students
+                    </div>
+                    <div className="font-display text-2xl font-bold">{tracker.totalStudents}</div>
+                  </div>
+                  <div className="rounded-2xl border border-green-500/20 bg-green-50 p-4 dark:bg-green-950/20">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-green-700 dark:text-green-300">
+                      Responded
+                    </div>
+                    <div className="font-display text-2xl font-bold text-green-700 dark:text-green-300">
+                      {tracker.respondedCount}
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-red-500/25 bg-red-50 p-4 dark:bg-red-950/20">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-red-700 dark:text-red-300">
+                      Not responded
+                    </div>
+                    <div className="font-display text-2xl font-bold text-red-700 dark:text-red-300">
+                      {tracker.notRespondedCount}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 flex gap-2">
+                  <button
+                    onClick={() => setTrackerTab("not")}
+                    className={trackerTab === "not" ? "btn-primary" : "btn-secondary"}
+                  >
+                    🔴 Not responded — {tracker.notRespondedCount}
+                  </button>
+                  <button
+                    onClick={() => setTrackerTab("yes")}
+                    className={trackerTab === "yes" ? "btn-primary" : "btn-secondary"}
+                  >
+                    🟢 Responded — {tracker.respondedCount}
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-5">
+                {trackerTab === "not" ? (
+                  tracker.notResponded.length === 0 ? (
+                    <p className="text-sm font-semibold text-green-700 dark:text-green-300">
+                      🎉 Everyone has responded.
+                    </p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {tracker.notResponded.map((r) => (
+                        <span
+                          key={r}
+                          className="rounded-lg border border-red-500/30 bg-red-50 px-2.5 py-1 font-mono text-xs font-semibold text-red-700 dark:bg-red-950/30 dark:text-red-300"
+                        >
+                          {r}
+                        </span>
+                      ))}
+                    </div>
+                  )
+                ) : tracker.responded.length === 0 ? (
+                  <p className="text-sm text-ink/60 dark:text-[#F5EDE7]/60">No responses yet.</p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {tracker.responded.map((r) => (
+                      <span
+                        key={r}
+                        className="rounded-lg border border-green-500/30 bg-green-50 px-2.5 py-1 font-mono text-xs font-semibold text-green-700 dark:bg-green-950/30 dark:text-green-300"
+                      >
+                        ✓ {r}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {tracker.unknownSubmissions.length > 0 && (
+                  <p className="mt-4 text-xs text-ink/50 dark:text-[#F5EDE7]/50">
+                    {tracker.unknownSubmissions.length} submitted roll number(s) are not in your imported list and were ignored.
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+        </section>
 
         {/* Loading */}
         {loading && (
