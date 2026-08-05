@@ -1005,7 +1005,7 @@ async function handleResponseTracker(req: VercelRequest, res: VercelResponse) {
     const items = (formRes.data.items || []).filter(
       (i: any) => i.questionItem?.question?.questionId
     );
-    const rollItem =
+    const rollItem: any =
       items.find((i: any) => ROLL_FIELD_REGEX.test(i.title || "")) || null;
 
     const allResponses = responsesRes.data.responses || [];
