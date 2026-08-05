@@ -111,12 +111,46 @@ export async function generateQuestions(
 export async function createForm(
   title: string,
   questions: ParsedQuestion[],
-  expiresAt?: string | null
+  expiresAt?: string | null,
+  expectedStudents?: string[]
 ) {
   return call<{ formId: string; responderUri: string; editUri: string }>("/api/create-form", {
     method: "POST",
     headers: await authHeaders(),
-    body: JSON.stringify({ title, questions, expiresAt: expiresAt ?? null }),
+    body: JSON.stringify({
+      title,
+      questions,
+      expiresAt: expiresAt ?? null,
+      expectedStudents: expectedStudents ?? [],
+    }),
+  });
+}
+
+export type ResponseTracker = {
+  hasExpectedList: boolean;
+  rollFieldTitle: string | null;
+  totalStudents: number;
+  respondedCount: number;
+  notRespondedCount: number;
+  responded: string[];
+  notResponded: string[];
+  unknownSubmissions: string[];
+  totalResponses: number;
+};
+
+export async function getResponseTracker(formId: string) {
+  return call<ResponseTracker>("/api/response-tracker", {
+    method: "POST",
+    headers: await authHeaders(),
+    body: JSON.stringify({ formId }),
+  });
+}
+
+export async function updateExpectedStudents(formId: string, expectedStudents: string[]) {
+  return call<{ ok: true; totalStudents: number }>("/api/expected-students", {
+    method: "POST",
+    headers: await authHeaders(),
+    body: JSON.stringify({ formId, expectedStudents }),
   });
 }
 
