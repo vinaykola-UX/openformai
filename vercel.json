@@ -5,6 +5,7 @@
     { "source": "/api/preview-form", "destination": "/api/forms?action=preview-form" },
     { "source": "/api/form-analytics", "destination": "/api/forms?action=form-analytics" },
     { "source": "/api/response-tracker", "destination": "/api/forms?action=response-tracker" },
+    { "source": "/api/rosters", "destination": "/api/forms?action=rosters" },
     { "source": "/api/expected-students", "destination": "/api/forms?action=expected-students" },
     { "source": "/api/form-report", "destination": "/api/forms?action=form-report" },
     { "source": "/api/overall-review", "destination": "/api/forms?action=overall-review" },
