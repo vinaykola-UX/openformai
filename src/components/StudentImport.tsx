@@ -1,6 +1,7 @@
-import { useRef, useState } from "react";
-import { Users, Upload, Loader2, X, Trash2 } from "lucide-react";
-import { extractFileText } from "../lib/api";
+import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
+import { Users, Upload, Loader2, X, Trash2, BookUser } from "lucide-react";
+import { extractFileText, listRosters, type Roster } from "../lib/api";
 import { parseRollNumbers, dedupeRolls, normalizeRoll } from "../lib/rollNumbers";
 
 type Props = {
@@ -15,6 +16,22 @@ export default function StudentImport({ students, onChange }: Props) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
+  const [rosters, setRosters] = useState<Roster[]>([]);
+
+  useEffect(() => {
+    listRosters()
+      .then((r) => setRosters(r.rosters || []))
+      .catch(() => setRosters([]));
+  }, []);
+
+  const defaultRoster = rosters.find((r) => r.isDefault) || null;
+
+  function applyRoster(id: string) {
+    const roster = rosters.find((r) => r.id === id);
+    if (!roster) return;
+    setErr("");
+    merge(roster.students);
+  }
 
   function merge(incoming: string[]) {
     const before = students.length;
@@ -85,6 +102,14 @@ export default function StudentImport({ students, onChange }: Props) {
         who hasn&apos;t responded on the analytics page.
       </p>
 
+      {students.length === 0 && defaultRoster && (
+        <p className="mt-2 flex items-center gap-1.5 text-xs font-medium text-brand">
+          <BookUser className="h-3.5 w-3.5" />
+          Default list &ldquo;{defaultRoster.name}&rdquo; ({defaultRoster.students.length}) will be
+          used automatically.
+        </p>
+      )}
+
       {students.length > 0 && (
         <p className="mt-2 text-xs font-semibold text-brand">
           {students.length} student{students.length === 1 ? "" : "s"} imported
@@ -93,6 +118,28 @@ export default function StudentImport({ students, onChange }: Props) {
 
       {open && (
         <div className="mt-3 space-y-3">
+          {rosters.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                defaultValue=""
+                onChange={(e) => {
+                  applyRoster(e.target.value);
+                  e.target.value = "";
+                }}
+                className="input h-9 w-auto py-0 text-xs"
+              >
+                <option value="">Use a saved list...</option>
+                {rosters.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.name} ({r.students.length}){r.isDefault ? " · default" : ""}
+                  </option>
+                ))}
+              </select>
+              <Link to="/students" className="text-xs font-semibold text-brand hover:underline">
+                Manage saved lists
+              </Link>
+            </div>
+          )}
           <textarea
             rows={5}
             value={pasted}
