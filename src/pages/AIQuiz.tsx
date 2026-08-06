@@ -6,6 +6,7 @@ import {
   Copy, ChevronDown, Download, Globe,
 } from "lucide-react";
 import AppShell from "../components/AppShell";
+import StudentImport from "../components/StudentImport";
 import ErrorCard from "../components/ErrorCard";
 import CopyLinkButton from "../components/CopyLinkButton";
 import UnlockDialog from "../components/UnlockDialog";
@@ -52,6 +53,7 @@ export default function AIQuiz() {
   const [qType, setQType] = useState<string>("Mixed");
   const [mode, setMode] = useState<"quiz" | "form">("quiz");
   const [expiresAt, setExpiresAt] = useState<string>("");
+  const [expectedStudents, setExpectedStudents] = useState<string[]>([]);
 
   const [questions, setQuestions] = useState<QuizQuestion[] | null>(null);
   const [generating, setGenerating] = useState(false);
@@ -148,7 +150,9 @@ export default function AIQuiz() {
     if (!questions?.length) return;
     setError(""); setCreating(true);
     try {
-      const r = await createQuizForm({ title, questions, mode, expiresAt: expiresAt || null });
+      const r = await createQuizForm({
+        title, questions, mode, expiresAt: expiresAt || null, expectedStudents,
+      });
       setResult(r);
       setStep("result");
     } catch (err: any) {
@@ -477,6 +481,9 @@ export default function AIQuiz() {
                 <p className="mt-1 text-xs text-ink/60 dark:text-[#F5EDE7]/60">
                   Leave empty to keep the form open indefinitely.
                 </p>
+              </div>
+              <div className="mt-4">
+                <StudentImport students={expectedStudents} onChange={setExpectedStudents} />
               </div>
             </div>
 

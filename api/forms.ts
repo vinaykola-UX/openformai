@@ -4,6 +4,12 @@ import { FieldValue } from "firebase-admin/firestore";
 import { verifyAuth } from "./_lib/verify-auth.js";
 import { oauthClient } from "./_lib/google-oauth.js";
 import { getAdmin } from "./_lib/firebase-admin.js";
+import {
+  listRosters,
+  saveRoster,
+  deleteRoster,
+  resolveExpectedStudents,
+} from "./_lib/rosters.js";
 
 // ─────────────────────────────────────────────────────────────────────────
 // Shared types (used by "create-form")
@@ -258,11 +264,12 @@ async function handleCreateForm(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
   try {
     const { uid } = await verifyAuth(req);
-    const { title, questions, expiresAt, expectedStudents } = req.body as {
+    const { title, questions, expiresAt, expectedStudents, rosterId } = req.body as {
       title: string;
       questions: Question[];
       expiresAt?: string | null;
       expectedStudents?: string[];
+      rosterId?: string | null;
     };
     if (!title || !Array.isArray(questions) || !questions.length) {
       return res.status(400).json({ error: "Missing title or questions" });
@@ -312,6 +319,8 @@ async function handleCreateForm(req: VercelRequest, res: VercelResponse) {
       }
     }
 
+    const resolvedStudents = await resolveExpectedStudents(uid, expectedStudents, rosterId);
+
     const client = oauthClient();
     client.setCredentials({ refresh_token: refreshToken });
     const forms = google.forms({ version: "v1", auth: client });
@@ -336,7 +345,7 @@ async function handleCreateForm(req: VercelRequest, res: VercelResponse) {
       questionCount: questions.length,
       questions,
       isQuiz: false,
-      expectedStudents: dedupeRolls(Array.isArray(expectedStudents) ? expectedStudents : []),
+      expectedStudents: resolvedStudents,
       expiresAt: expiresAt ? new Date(expiresAt) : null,
       createdAt: FieldValue.serverTimestamp(),
     });
@@ -1057,6 +1066,41 @@ async function handleResponseTracker(req: VercelRequest, res: VercelResponse) {
   }
 }
 
+
+// ─────────────────────────────────────────────────────────────────────────
+// action: "rosters" — saved student lists on the teacher's account
+// GET = list, POST = create/update, DELETE = remove
+// ─────────────────────────────────────────────────────────────────────────
+async function handleRosters(req: VercelRequest, res: VercelResponse) {
+  try {
+    const { uid } = await verifyAuth(req);
+
+    if (req.method === "GET") {
+      return res.status(200).json({ rosters: await listRosters(uid) });
+    }
+    if (req.method === "POST") {
+      const { id, name, students, isDefault } = req.body as {
+        id?: string;
+        name: string;
+        students: string[];
+        isDefault?: boolean;
+      };
+      const roster = await saveRoster(uid, { id, name, students, isDefault });
+      return res.status(200).json({ roster, rosters: await listRosters(uid) });
+    }
+    if (req.method === "DELETE") {
+      const { id } = req.body as { id: string };
+      if (!id) return res.status(400).json({ error: "Missing id" });
+      await deleteRoster(uid, id);
+      return res.status(200).json({ ok: true, rosters: await listRosters(uid) });
+    }
+    return res.status(405).json({ error: "Method not allowed" });
+  } catch (err: any) {
+    console.error("rosters error", err);
+    return res.status(500).json({ error: err.message || "Student list request failed" });
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 // Router — dispatches on ?action=... set by vercel.json
 // ─────────────────────────────────────────────────────────────────────────
@@ -1074,6 +1118,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return handleFormAnalytics(req, res);
     case "response-tracker":
       return handleResponseTracker(req, res);
+    case "rosters":
+      return handleRosters(req, res);
     case "expected-students":
       return handleExpectedStudents(req, res);
     case "form-report":

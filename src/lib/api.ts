@@ -112,7 +112,8 @@ export async function createForm(
   title: string,
   questions: ParsedQuestion[],
   expiresAt?: string | null,
-  expectedStudents?: string[]
+  expectedStudents?: string[],
+  rosterId?: string | null
 ) {
   return call<{ formId: string; responderUri: string; editUri: string }>("/api/create-form", {
     method: "POST",
@@ -122,6 +123,7 @@ export async function createForm(
       questions,
       expiresAt: expiresAt ?? null,
       expectedStudents: expectedStudents ?? [],
+      rosterId: rosterId ?? null,
     }),
   });
 }
@@ -199,4 +201,38 @@ export async function extractDriveUrl(url: string): Promise<string> {
     body: JSON.stringify({ url }),
   });
   return data.text;
+}
+// ── Saved student lists (rosters) ────────────────────────────────────────
+
+export type Roster = {
+  id: string;
+  name: string;
+  students: string[];
+  isDefault: boolean;
+  updatedAt?: string | null;
+};
+
+export async function listRosters() {
+  return call<{ rosters: Roster[] }>("/api/rosters", { headers: await authHeaders(false) });
+}
+
+export async function saveRoster(input: {
+  id?: string;
+  name: string;
+  students: string[];
+  isDefault?: boolean;
+}) {
+  return call<{ roster: Roster; rosters: Roster[] }>("/api/rosters", {
+    method: "POST",
+    headers: await authHeaders(),
+    body: JSON.stringify(input),
+  });
+}
+
+export async function deleteRoster(id: string) {
+  return call<{ ok: true; rosters: Roster[] }>("/api/rosters", {
+    method: "DELETE",
+    headers: await authHeaders(),
+    body: JSON.stringify({ id }),
+  });
 }

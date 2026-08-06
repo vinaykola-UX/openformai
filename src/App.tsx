@@ -17,6 +17,7 @@ import FormAnalytics from "./pages/FormAnalytics";
 import FormPreview from "./pages/FormPreview";
 import FormReport from "./pages/FormReport";
 import OverallReview from "./pages/OverallReview";
+import Students from "./pages/Students";
 
 export default function App() {
   return (
@@ -93,6 +94,14 @@ export default function App() {
         element={
           <ProtectedRoute>
             <ConnectGoogle />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/students"
+        element={
+          <ProtectedRoute>
+            <Students />
           </ProtectedRoute>
         }
       />

@@ -4,6 +4,7 @@ import { google } from "googleapis";
 import { FieldValue } from "firebase-admin/firestore";
 import { verifyAuth } from "./_lib/verify-auth.js";
 import { getAdmin } from "./_lib/firebase-admin.js";
+import { resolveExpectedStudents } from "./_lib/rosters.js";
 import { oauthClient } from "./_lib/google-oauth.js";
 import { geminiWithFallback, isQuotaError } from "./_lib/gemini-keys.js";
 import {
@@ -238,8 +239,9 @@ function buildFormItem(q: QuizQuestion, index: number, isQuiz: boolean) {
 
 async function handleCreateForm(req: VercelRequest, res: VercelResponse) {
   const { uid } = await verifyAuth(req);
-  const { title, questions, mode, expiresAt } = req.body as {
+  const { title, questions, mode, expiresAt, expectedStudents, rosterId } = req.body as {
     title: string; questions: QuizQuestion[]; mode: "quiz" | "form"; expiresAt?: string | null;
+    expectedStudents?: string[]; rosterId?: string | null;
   };
   if (!title || !Array.isArray(questions) || !questions.length) {
     return res.status(400).json({ error: "Missing title or questions" });
@@ -281,6 +283,8 @@ async function handleCreateForm(req: VercelRequest, res: VercelResponse) {
     }
   }
 
+  const resolvedStudents = await resolveExpectedStudents(uid, expectedStudents, rosterId);
+
   const client = oauthClient();
   client.setCredentials({ refresh_token: refreshToken });
   const forms = google.forms({ version: "v1", auth: client });
@@ -306,6 +310,7 @@ async function handleCreateForm(req: VercelRequest, res: VercelResponse) {
     uid, title, googleFormId: formId, responderUri, editUri,
     questionCount: questions.length, questions,
     source: "ai-quiz", quizMode: isQuiz, isQuiz,
+    expectedStudents: resolvedStudents,
     expiresAt: expiresAt ? new Date(expiresAt) : null,
     createdAt: FieldValue.serverTimestamp(),
   });

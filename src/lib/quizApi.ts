@@ -71,6 +71,8 @@ export const createQuizForm = (opts: {
   questions: QuizQuestion[];
   mode: "quiz" | "form";
   expiresAt?: string | null;
+  expectedStudents?: string[];
+  rosterId?: string | null;
 }) => call<{ formId: string; responderUri: string; editUri: string }>("/api/quiz", "create-form", opts);
 
 // ── Automation pipeline ──────────────────────────────────────────────────
