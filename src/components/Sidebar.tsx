@@ -5,6 +5,7 @@ import {
   Wand2,
   Brain,
   Layers,
+  BookUser,
   Link2,
   Shield,
   FileText,
@@ -24,6 +25,7 @@ const MAIN_NAV: NavItem[] = [
   { to: "/dashboard/new", label: "New Form", icon: <Wand2 className="h-[18px] w-[18px]" /> },
   { to: "/ai-quiz", label: "AI Quiz", icon: <Brain className="h-[18px] w-[18px]" /> },
   { to: "/automate", label: "Automate", icon: <Layers className="h-[18px] w-[18px]" /> },
+  { to: "/students", label: "Students", icon: <BookUser className="h-[18px] w-[18px]" /> },
 ];
 
 const ACCOUNT_NAV: NavItem[] = [
