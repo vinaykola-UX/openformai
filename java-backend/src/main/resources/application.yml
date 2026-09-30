@@ -1,0 +1,26 @@
+server:
+  address: 0.0.0.0
+  port: ${JAVA_PORT:8080}
+  shutdown: graceful
+  tomcat:
+    max-http-form-post-size: 64KB
+
+spring:
+  application:
+    name: openform-google-import
+  jackson:
+    default-property-inclusion: non_null
+
+app:
+  frontend-origin: ${APP_FRONTEND_ORIGIN:http://localhost:5173}
+  google:
+    client-id: ${GOOGLE_CLIENT_ID:}
+    client-secret: ${GOOGLE_CLIENT_SECRET:}
+    redirect-uri: ${GOOGLE_IMPORT_REDIRECT_URI:http://localhost:8080/api/v1/google/import/callback}
+    success-uri: ${GOOGLE_IMPORT_SUCCESS_URI:http://localhost:5173/dashboard?googleImport=connected}
+    error-uri: ${GOOGLE_IMPORT_ERROR_URI:http://localhost:5173/dashboard?googleImport=error}
+  firebase:
+    project-id: ${FIREBASE_PROJECT_ID:}
+    client-email: ${FIREBASE_CLIENT_EMAIL:}
+    private-key: ${FIREBASE_PRIVATE_KEY:}
+  token-encryption-key: ${GOOGLE_IMPORT_TOKEN_ENCRYPTION_KEY:}

@@ -3,13 +3,9 @@ import { auth, waitForAuthReady } from "./firebase";
 async function authHeaders(json = true): Promise<Record<string, string>> {
   let user = auth.currentUser;
   if (!user) user = await waitForAuthReady();
-  console.log("[api] Firebase user:", user);
-  console.log("[api] User UID:", user?.uid);
   if (!user) throw new Error("Not authenticated. Please sign in again.");
   const token = await user.getIdToken(/* forceRefresh */ false);
-  console.log("[api] Token exists:", !!token, "length:", token?.length);
   const authHeader = `Bearer ${token}`;
-  console.log("[api] Authorization header:", authHeader.slice(0, 24) + "...");
   const h: Record<string, string> = { Authorization: authHeader };
   if (json) h["Content-Type"] = "application/json";
   return h;
@@ -201,6 +197,50 @@ export async function extractDriveUrl(url: string): Promise<string> {
     body: JSON.stringify({ url }),
   });
   return data.text;
+}
+
+const GOOGLE_IMPORT_API = (import.meta.env.VITE_GOOGLE_IMPORT_API_URL || "http://localhost:8080").replace(/\/$/, "");
+
+export type GoogleImportForm = {
+  googleFormId: string;
+  title: string;
+  modifiedTime?: string;
+  createdTime?: string;
+  webViewLink?: string;
+};
+
+export async function getGoogleImportAuthUrl(): Promise<string> {
+  const data = await call<{ url: string }>(`${GOOGLE_IMPORT_API}/api/v1/google/import/auth-url`, {
+    headers: await authHeaders(false),
+  });
+  return data.url;
+}
+
+export async function listGoogleImportForms(pageToken?: string) {
+  const url = new URL(`${GOOGLE_IMPORT_API}/api/v1/google/import/forms`);
+  if (pageToken) url.searchParams.set("pageToken", pageToken);
+  return call<{ forms: GoogleImportForm[]; nextPageToken?: string }>(url.toString(), {
+    headers: await authHeaders(false),
+  });
+}
+
+export type GoogleImportResult = {
+  googleFormId: string;
+  alreadyImported: boolean;
+  documentId: string;
+  warnings: { index: number; title: string; reason: string }[];
+};
+
+export async function importGoogleForms(formIds: string[]) {
+  return call<{
+    imported: GoogleImportResult[];
+    importedCount: number;
+    alreadyImportedCount: number;
+  }>(`${GOOGLE_IMPORT_API}/api/v1/google/import/forms`, {
+    method: "POST",
+    headers: await authHeaders(),
+    body: JSON.stringify({ formIds }),
+  });
 }
 // ── Saved student lists (rosters) ────────────────────────────────────────
 

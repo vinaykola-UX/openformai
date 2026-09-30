@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   collection,
   doc,
@@ -29,6 +29,8 @@ import {
   Brain,
   Layers,
   Infinity as InfinityIcon,
+  Download,
+  X,
 } from "lucide-react";
 import AppShell from "../components/AppShell";
 import CopyLinkButton from "../components/CopyLinkButton";
@@ -36,7 +38,13 @@ import Footer from "../components/Footer";
 import UnlockDialog from "../components/UnlockDialog";
 import { useAuth } from "../contexts/AuthContext";
 import { db } from "../lib/firebase";
-import { deleteForm } from "../lib/api";
+import {
+  deleteForm,
+  getGoogleImportAuthUrl,
+  importGoogleForms,
+  listGoogleImportForms,
+  type GoogleImportForm,
+} from "../lib/api";
 
 type FormDoc = {
   id: string;
@@ -113,13 +121,99 @@ const QUICK_ACTIONS: QuickAction[] = [
 
 export default function Dashboard() {
   const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [forms, setForms] = useState<FormDoc[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [unlocked, setUnlocked] = useState(false);
   const [showUnlock, setShowUnlock] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importForms, setImportForms] = useState<GoogleImportForm[]>([]);
+  const [importSearch, setImportSearch] = useState("");
+  const [selectedImportIds, setSelectedImportIds] = useState<string[]>([]);
+  const [importPageToken, setImportPageToken] = useState<string | undefined>();
+  const [nextImportPageToken, setNextImportPageToken] = useState<string | undefined>();
+  const [importLoading, setImportLoading] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState("");
+  const [importSummary, setImportSummary] = useState("");
   const DAILY_LIMIT = 5;
   const TOTAL_LIMIT = 80;
+
+  useEffect(() => {
+    const returnState = searchParams.get("googleImport");
+    if (!returnState) return;
+    setImportOpen(true);
+    if (returnState === "connected") {
+      setImportError("");
+      void loadImportForms();
+    } else {
+      setImportError(searchParams.get("reason") === "account_mismatch"
+        ? "The Google account selected for import does not match your OpenForm account."
+        : "Google authorization was not completed. You can try again.");
+    }
+    const next = new URLSearchParams(searchParams);
+    next.delete("googleImport");
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
+
+  async function loadImportForms(pageToken?: string) {
+    setImportLoading(true);
+    setImportError("");
+    setImportSummary("");
+    try {
+      const result = await listGoogleImportForms(pageToken);
+      setImportForms((current) => {
+        const formsById = new Map((pageToken ? current : []).map((form) => [form.googleFormId, form]));
+        result.forms.forEach((form) => formsById.set(form.googleFormId, form));
+        return Array.from(formsById.values());
+      });
+      setImportPageToken(pageToken);
+      setNextImportPageToken(result.nextPageToken);
+    } catch (error: any) {
+      if (error.status === 403 && error.code === "GOOGLE_IMPORT_NOT_CONNECTED") {
+        try {
+          window.location.assign(await getGoogleImportAuthUrl());
+          return;
+        } catch (authError: any) {
+          setImportError(authError.message || "Could not start Google authorization.");
+        }
+      } else {
+        setImportError(error.message || "Could not load Google Forms.");
+      }
+    } finally {
+      setImportLoading(false);
+    }
+  }
+
+  async function openImportDialog() {
+    setImportOpen(true);
+    setImportForms([]);
+    setSelectedImportIds([]);
+    setImportPageToken(undefined);
+    setNextImportPageToken(undefined);
+    setImportSearch("");
+    await loadImportForms();
+  }
+
+  async function submitImport() {
+    setImporting(true);
+    setImportError("");
+    setImportSummary("");
+    try {
+      const result = await importGoogleForms(selectedImportIds);
+      const warningCount = result.imported.reduce((count, form) => count + form.warnings.length, 0);
+      setImportSummary(`${result.importedCount} Google Form${result.importedCount === 1 ? "" : "s"} imported successfully.${result.alreadyImportedCount ? ` ${result.alreadyImportedCount} already in your dashboard.` : ""}${warningCount ? ` ${warningCount} unsupported item${warningCount === 1 ? " was" : "s were"} retained with warnings.` : ""}`);
+      setSelectedImportIds([]);
+      await loadImportForms(importPageToken);
+    } catch (error: any) {
+      setImportError(error.message || "Import failed. Please try again.");
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  const visibleImportForms = importForms.filter((form) => form.title.toLowerCase().includes(importSearch.trim().toLowerCase()));
 
   useEffect(() => {
     if (!user) return;
@@ -267,6 +361,9 @@ export default function Dashboard() {
                     className="input pl-9"
                   />
                 </div>
+                <button onClick={openImportDialog} className="btn-ghost inline-flex shrink-0 items-center justify-center gap-2">
+                  <Download className="h-4 w-4" /> Import Google Forms
+                </button>
               </div>
 
               {loading ? (
@@ -296,6 +393,60 @@ export default function Dashboard() {
         onClose={() => setShowUnlock(false)}
         onUnlocked={() => setShowUnlock(false)}
       />
+
+      {importOpen && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 px-4 py-6" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !importing) setImportOpen(false); }}>
+          <section role="dialog" aria-modal="true" aria-labelledby="import-google-title" className="flex max-h-[min(760px,90vh)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-[#241218]">
+            <header className="flex items-start justify-between border-b border-brand/10 px-5 py-4 dark:border-white/10">
+              <div>
+                <h2 id="import-google-title" className="font-display text-lg font-bold">Import Google Forms</h2>
+                <p className="mt-1 text-sm text-ink/60 dark:text-[#F5EDE7]/60">Forms from your Google account</p>
+              </div>
+              <button onClick={() => setImportOpen(false)} disabled={importing} aria-label="Close import dialog" className="rounded-lg p-2 text-ink/50 hover:bg-brand/5 disabled:opacity-50 dark:text-white/60"><X className="h-4 w-4" /></button>
+            </header>
+            <div className="border-b border-brand/10 px-5 py-4 dark:border-white/10">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink/40" />
+                <input value={importSearch} onChange={(event) => setImportSearch(event.target.value)} placeholder="Search Google Forms..." className="input pl-9" />
+              </div>
+            </div>
+            <div className="min-h-40 flex-1 overflow-y-auto px-5 py-2">
+              {importLoading ? (
+                <div className="flex items-center justify-center gap-2 py-12 text-sm text-ink/60"><Loader2 className="h-4 w-4 animate-spin" /> Loading Google Forms...</div>
+              ) : importError ? (
+                <div className="py-8 text-center text-sm text-red-600 dark:text-red-300">{importError}</div>
+              ) : visibleImportForms.length === 0 ? (
+                <div className="py-12 text-center text-sm text-ink/60 dark:text-[#F5EDE7]/60">{importForms.length ? "No forms match your search." : "No Google Forms found in this account."}</div>
+              ) : (
+                <ul className="divide-y divide-brand/10 dark:divide-white/10">
+                  {visibleImportForms.map((form) => (
+                    <li key={form.googleFormId}>
+                      <label className="flex cursor-pointer items-start gap-3 py-3">
+                        <input type="checkbox" className="mt-1 h-4 w-4 accent-brand" checked={selectedImportIds.includes(form.googleFormId)} disabled={!selectedImportIds.includes(form.googleFormId) && selectedImportIds.length >= 20} onChange={(event) => setSelectedImportIds((ids) => event.target.checked ? [...ids, form.googleFormId] : ids.filter((id) => id !== form.googleFormId))} />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-semibold">{form.title}</span>
+                          <span className="mt-1 block text-xs text-ink/50 dark:text-[#F5EDE7]/50">Modified {form.modifiedTime ? new Date(form.modifiedTime).toLocaleDateString() : "date unavailable"}</span>
+                        </span>
+                        {form.webViewLink && <a href={form.webViewLink} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()} className="text-xs font-semibold text-brand hover:underline">Preview</a>}
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {nextImportPageToken && !importLoading && !importError && (
+                <button onClick={() => void loadImportForms(nextImportPageToken)} className="my-3 w-full rounded-lg border border-brand/15 px-3 py-2 text-sm font-semibold text-brand hover:bg-brand/5">Load more forms</button>
+              )}
+            </div>
+            {(importSummary || importError) && <p className={`border-t px-5 py-3 text-sm ${importError ? "border-red-200 text-red-700 dark:border-red-900 dark:text-red-300" : "border-emerald-200 text-emerald-700 dark:border-emerald-900 dark:text-emerald-300"}`}>{importError || importSummary}</p>}
+            <footer className="flex items-center justify-between gap-3 border-t border-brand/10 px-5 py-4 dark:border-white/10">
+              <span className="text-xs text-ink/50 dark:text-[#F5EDE7]/50">{selectedImportIds.length} of 20 selected</span>
+              <button onClick={() => void submitImport()} disabled={importing || importLoading || selectedImportIds.length === 0} className="btn-primary inline-flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50">
+                {importing && <Loader2 className="h-4 w-4 animate-spin" />}{importing ? "Importing..." : "Import Selected"}
+              </button>
+            </footer>
+          </section>
+        </div>
+      )}
     </AppShell>
   );
 }

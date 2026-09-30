@@ -1,0 +1,22 @@
+[Unit]
+Description=OpenForm Google Forms Import API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=openform
+Group=openform
+WorkingDirectory=/opt/openform-google-import
+EnvironmentFile=/etc/openform/google-import.env
+ExecStart=/usr/bin/java -jar /opt/openform-google-import/openform-google-import.jar
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log/openform-google-import
+
+[Install]
+WantedBy=multi-user.target
