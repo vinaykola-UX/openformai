@@ -1,0 +1,3 @@
+# Redirects are managed in netlify.toml
+# This file is kept empty to avoid conflicts with the proxy rules.
+# For non-Netlify deployments (e.g. Firebase Hosting), use your platform's config.
