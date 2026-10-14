@@ -1,6 +1,6 @@
 # ──────────────────────────────────────────────────────────────
 # Netlify configuration for OpenForm Frontend
-# Proxies API calls to Vercel (serverless functions) and
+# Proxies API calls to Vercel (https://openformai.vercel.app) and
 # serves the Vite SPA from dist/.
 #
 # Required Netlify Environment Variables (set in dashboard):
@@ -11,13 +11,11 @@
 #   VITE_FIREBASE_MESSAGING_SENDER_ID
 #   VITE_FIREBASE_APP_ID
 #   VITE_GOOGLE_IMPORT_API_URL   → Java backend URL (e.g. https://openform-import.onrender.com)
-#   VERCEL_API_URL               → Vercel deployment URL (e.g. https://openform.vercel.app)
 # ──────────────────────────────────────────────────────────────
 
 [build]
   command   = "npm install && npm run build"
   publish   = "dist"
-
 
 # ── API Proxies ──────────────────────────────────────────────
 # All /api/* requests are reverse-proxied (200 rewrite) to Vercel.
@@ -27,119 +25,119 @@
 # Google OAuth auth-url (Vercel serverless)
 [[redirects]]
   from   = "/api/google/auth-url"
-  to     = ":VERCEL_API_URL/api/google/auth-url"
+  to     = "https://openformai.vercel.app/api/google/auth-url"
   status = 200
   force  = true
 
 # Google OAuth callback (Vercel serverless)
 [[redirects]]
   from   = "/api/google/callback"
-  to     = ":VERCEL_API_URL/api/google/callback"
+  to     = "https://openformai.vercel.app/api/google/callback"
   status = 200
   force  = true
 
 # Unlock endpoint
 [[redirects]]
   from   = "/api/unlock"
-  to     = ":VERCEL_API_URL/api/unlock"
+  to     = "https://openformai.vercel.app/api/unlock"
   status = 200
   force  = true
 
 # Create form
 [[redirects]]
   from   = "/api/create-form"
-  to     = ":VERCEL_API_URL/api/create-form"
+  to     = "https://openformai.vercel.app/api/create-form"
   status = 200
   force  = true
 
 # Delete form
 [[redirects]]
   from   = "/api/delete-form"
-  to     = ":VERCEL_API_URL/api/delete-form"
+  to     = "https://openformai.vercel.app/api/delete-form"
   status = 200
   force  = true
 
 # Preview form
 [[redirects]]
   from   = "/api/preview-form"
-  to     = ":VERCEL_API_URL/api/preview-form"
+  to     = "https://openformai.vercel.app/api/preview-form"
   status = 200
   force  = true
 
 # Form analytics
 [[redirects]]
   from   = "/api/form-analytics"
-  to     = ":VERCEL_API_URL/api/form-analytics"
+  to     = "https://openformai.vercel.app/api/form-analytics"
   status = 200
   force  = true
 
 # Response tracker
 [[redirects]]
   from   = "/api/response-tracker"
-  to     = ":VERCEL_API_URL/api/response-tracker"
+  to     = "https://openformai.vercel.app/api/response-tracker"
   status = 200
   force  = true
 
 # Rosters
 [[redirects]]
   from   = "/api/rosters"
-  to     = ":VERCEL_API_URL/api/rosters"
+  to     = "https://openformai.vercel.app/api/rosters"
   status = 200
   force  = true
 
 # Expected students
 [[redirects]]
   from   = "/api/expected-students"
-  to     = ":VERCEL_API_URL/api/expected-students"
+  to     = "https://openformai.vercel.app/api/expected-students"
   status = 200
   force  = true
 
 # Form report
 [[redirects]]
   from   = "/api/form-report"
-  to     = ":VERCEL_API_URL/api/form-report"
+  to     = "https://openformai.vercel.app/api/form-report"
   status = 200
   force  = true
 
 # Overall review
 [[redirects]]
   from   = "/api/overall-review"
-  to     = ":VERCEL_API_URL/api/overall-review"
+  to     = "https://openformai.vercel.app/api/overall-review"
   status = 200
   force  = true
 
 # Extract content
 [[redirects]]
   from   = "/api/extract"
-  to     = ":VERCEL_API_URL/api/extract"
+  to     = "https://openformai.vercel.app/api/extract"
   status = 200
   force  = true
 
 # Drive import
 [[redirects]]
   from   = "/api/drive-import"
-  to     = ":VERCEL_API_URL/api/drive-import"
+  to     = "https://openformai.vercel.app/api/drive-import"
   status = 200
   force  = true
 
 # Generate questions
 [[redirects]]
   from   = "/api/generate"
-  to     = ":VERCEL_API_URL/api/generate"
+  to     = "https://openformai.vercel.app/api/generate"
   status = 200
   force  = true
 
 # Quiz endpoints
 [[redirects]]
   from   = "/api/quiz/*"
-  to     = ":VERCEL_API_URL/api/quiz/:splat"
+  to     = "https://openformai.vercel.app/api/quiz/:splat"
   status = 200
   force  = true
 
 # Catch-all for any other /api/* routes
 [[redirects]]
   from   = "/api/*"
-  to     = ":VERCEL_API_URL/api/:splat"
+  to     = "https://openformai.vercel.app/api/:splat"
   status = 200
   force  = true
 
