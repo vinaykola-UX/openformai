@@ -18,9 +18,6 @@
   command   = "npm install && npm run build"
   publish   = "dist"
 
-# Ignore builds for the java-backend directory changes
-[build.ignore]
-  command = "git diff --quiet HEAD^ HEAD -- java-backend/"
 
 # ── API Proxies ──────────────────────────────────────────────
 # All /api/* requests are reverse-proxied (200 rewrite) to Vercel.

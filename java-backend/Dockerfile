@@ -1,8 +1,10 @@
 FROM eclipse-temurin:25-jdk AS build
 WORKDIR /workspace
-COPY pom.xml .
+COPY .mvn/ .mvn/
+COPY mvnw pom.xml ./
+RUN sed -i 's/\r$//' mvnw && chmod +x mvnw
 COPY src ./src
-RUN mvn -B -DskipTests package
+RUN ./mvnw -B -DskipTests package
 
 FROM eclipse-temurin:25-jre
 WORKDIR /app

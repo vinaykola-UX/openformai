@@ -154,6 +154,7 @@ export default function Dashboard() {
     }
     const next = new URLSearchParams(searchParams);
     next.delete("googleImport");
+    next.delete("reason");
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams]);
 

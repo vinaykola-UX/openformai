@@ -217,7 +217,8 @@ export async function getGoogleImportAuthUrl(): Promise<string> {
 }
 
 export async function listGoogleImportForms(pageToken?: string) {
-  const url = new URL(`${GOOGLE_IMPORT_API}/api/v1/google/import/forms`);
+  const base = GOOGLE_IMPORT_API.startsWith("http") ? GOOGLE_IMPORT_API : (typeof window !== "undefined" ? window.location.origin + GOOGLE_IMPORT_API : "http://localhost:8080");
+  const url = new URL(`${base}/api/v1/google/import/forms`);
   if (pageToken) url.searchParams.set("pageToken", pageToken);
   return call<{ forms: GoogleImportForm[]; nextPageToken?: string }>(url.toString(), {
     headers: await authHeaders(false),
