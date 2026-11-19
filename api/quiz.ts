@@ -6,7 +6,7 @@ import { verifyAuth } from "./_lib/verify-auth.js";
 import { getAdmin } from "./_lib/firebase-admin.js";
 import { resolveExpectedStudents } from "./_lib/rosters.js";
 import { oauthClient } from "./_lib/google-oauth.js";
-import { geminiWithFallback, isQuotaError } from "./_lib/gemini-keys.js";
+import { geminiWithFallback, isQuotaError, GEMINI_MODEL } from "./_lib/gemini-keys.js";
 import {
   CACHE_TTL_MS,
   makeCacheKey,
@@ -40,7 +40,7 @@ const ANALYZE_SYSTEM = `You are an expert curriculum analyst. Given study materi
 async function runGeminiAnalyze(text: string) {
   const response = await geminiWithFallback((ai) =>
     ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: GEMINI_MODEL,
       contents: [{ role: "user", parts: [{ text: text.slice(0, 40000) }] }],
       config: { systemInstruction: ANALYZE_SYSTEM, responseMimeType: "application/json", responseSchema: ANALYZE_SCHEMA as any },
     })
@@ -142,7 +142,7 @@ async function handleGenerate(req: VercelRequest, res: VercelResponse) {
 
   try {
     questions = await runGeminiQuestions(prompt);
-    usedModel = "gemini-2.5-flash-lite";
+    usedModel = GEMINI_MODEL;
   } catch (geminiErr: any) {
     if (!(isQuotaError(geminiErr) || geminiErr?.allKeysExhausted)) {
       console.error("[quiz:generate] Gemini error:", geminiErr.message);
@@ -322,7 +322,7 @@ async function handleCreateForm(req: VercelRequest, res: VercelResponse) {
 // Research-grounded quiz starting point. Takes a plain-language command,
 // uses Gemini's Google Search tool to research it, and returns two distinct
 // angles to choose from. Deliberately NOT combined with responseSchema in
-// the same call — gemini-2.5-flash-lite can't reliably do tool use +
+// the same call — small flash-lite models can't reliably do tool use +
 // schema-forced JSON together (that combo needs Gemini 3). Instead this
 // asks for a clearly delimited plain-text format and parses it locally,
 // which is both cheaper (one AI call) and easier to debug than a second
@@ -380,7 +380,7 @@ CONTENT:
 
   const response = await geminiWithFallback((ai) =>
     ai.models.generateContent({
-      model: "gemini-2.5-flash-lite",
+      model: GEMINI_MODEL,
       contents: [{ role: "user", parts: [{ text: prompt }] }],
       config: {
         tools: [{ googleSearch: {} }],

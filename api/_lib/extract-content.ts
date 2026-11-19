@@ -1,7 +1,7 @@
 // api/_lib/extract-content.ts
 // Shared content extraction used by /api/extract and /api/drive-import.
 import { extractText, getDocumentProxy } from "unpdf";
-import { geminiWithFallback } from "./gemini-keys.js";
+import { geminiWithFallback, GEMINI_MODEL } from "./gemini-keys.js";
 
 export async function extractContent(
   buf: Buffer,
@@ -32,7 +32,7 @@ export async function extractContent(
     console.log("[extract] scanned PDF detected, falling back to Gemini OCR");
     const response = await geminiWithFallback((ai) =>
       ai.models.generateContent({
-        model: "gemini-2.5-flash-lite",
+        model: GEMINI_MODEL,
         contents: [
           {
             role: "user",
@@ -105,7 +105,7 @@ export async function extractContent(
     const imageMime = mt.startsWith("image/") ? mt : "image/png";
     const response = await geminiWithFallback((ai) =>
       ai.models.generateContent({
-        model: "gemini-2.5-flash-lite",
+        model: GEMINI_MODEL,
         contents: [
           {
             role: "user",

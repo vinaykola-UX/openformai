@@ -1,6 +1,6 @@
 import { Type } from "@google/genai";
 import { createHash } from "crypto";
-import { geminiWithFallback } from "./gemini-keys.js";
+import { geminiWithFallback, GEMINI_MODEL } from "./gemini-keys.js";
 
 export const QUESTIONS_SCHEMA = {
   type: Type.OBJECT,
@@ -119,7 +119,7 @@ export function parseQuestions(raw: any[]): any[] {
 export async function runGeminiQuestions(prompt: string): Promise<any[]> {
   const response = await geminiWithFallback((ai) =>
     ai.models.generateContent({
-      model: "gemini-2.5-flash-lite",
+      model: GEMINI_MODEL,
       contents: [{ role: "user", parts: [{ text: prompt }] }],
       config: {
         systemInstruction: QUESTIONS_SYSTEM,

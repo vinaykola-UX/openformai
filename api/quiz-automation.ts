@@ -3,7 +3,7 @@ import { Type } from "@google/genai";
 import { FieldValue } from "firebase-admin/firestore";
 import { verifyAuth } from "./_lib/verify-auth.js";
 import { getAdmin } from "./_lib/firebase-admin.js";
-import { geminiWithFallback, isQuotaError } from "./_lib/gemini-keys.js";
+import { geminiWithFallback, isQuotaError, GEMINI_MODEL } from "./_lib/gemini-keys.js";
 import {
   CACHE_TTL_MS,
   makeCacheKey,
@@ -129,7 +129,7 @@ async function handlePlanUnits(req: VercelRequest, res: VercelResponse) {
 
   const response = await geminiWithFallback((ai) =>
     ai.models.generateContent({
-      model: "gemini-2.5-flash-lite",
+      model: GEMINI_MODEL,
       contents: [{ role: "user", parts: [{ text: clipped }] }],
       config: { systemInstruction: system, responseMimeType: "application/json", responseSchema: schema as any },
     })
@@ -302,7 +302,7 @@ async function handleDraftGenerate(req: VercelRequest, res: VercelResponse) {
 
     try {
       questions = await runGeminiQuestions(prompt);
-      usedModel = "gemini-2.5-flash-lite";
+      usedModel = GEMINI_MODEL;
     } catch (geminiErr: any) {
       if (!(isQuotaError(geminiErr) || geminiErr?.allKeysExhausted)) {
         console.error("[quiz-automation:draft-generate] Gemini error:", geminiErr.message);

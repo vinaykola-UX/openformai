@@ -3,7 +3,7 @@ import { Type } from "@google/genai";
 import { verifyAuth } from "./_lib/verify-auth.js";
 import { extractContent } from "./_lib/extract-content.js";
 import { parseQuestions } from "../src/lib/questionParser.js";
-import { geminiWithFallback, isQuotaError } from "./_lib/gemini-keys.js";
+import { geminiWithFallback, isQuotaError, GEMINI_MODEL } from "./_lib/gemini-keys.js";
 
 export const config = {
   api: {
@@ -224,7 +224,7 @@ function runLocalParser(text: string) {
 async function runGemini(text: string) {
   const response = await geminiWithFallback((ai) =>
     ai.models.generateContent({
-      model: "gemini-2.5-flash-lite",
+      model: GEMINI_MODEL,
       contents: [{ role: "user", parts: [{ text }] }],
       config: {
         systemInstruction: SYSTEM,
