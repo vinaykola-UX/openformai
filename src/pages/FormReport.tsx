@@ -5,12 +5,15 @@ import {
   ArrowLeft, Loader2, FileSpreadsheet,
   FileText, Users, Trophy, TrendingUp,
   AlertTriangle, Download, BarChart2,
-  CalendarDays, CalendarRange,
+  CalendarDays, CalendarRange, CheckCircle2,
+  XCircle,
 } from "lucide-react";
 import Navbar from "../components/Navbar";
 import { useAuth } from "../contexts/AuthContext";
 import { db } from "../lib/firebase";
 import { auth, waitForAuthReady } from "../lib/firebase";
+import StudentImport from "../components/StudentImport";
+import { getResponseTracker, updateExpectedStudents, type ResponseTracker } from "../lib/api";
 
 type StudentResult = {
   responseId: string;
@@ -27,6 +30,7 @@ type StudentResult = {
 };
 
 type ReportData = {
+  formId?: string;
   formTitle: string;
   totalStudents: number;
   totalQuestions: number;
@@ -39,6 +43,7 @@ type ReportData = {
   students: StudentResult[];
   byBranch: Record<string, StudentResult[]>;
   branches: string[];
+  tracker?: ResponseTracker;
 };
 
 async function getAuthHeader() {
@@ -140,12 +145,49 @@ export default function FormReport() {
   const [customDate, setCustomDate] = useState("");
   const [rangeStart, setRangeStart] = useState("");
   const [rangeEnd, setRangeEnd] = useState("");
+  const [tracker, setTracker] = useState<ResponseTracker | null>(null);
+  const [trackerLoading, setTrackerLoading] = useState(false);
+  const [trackerTab, setTrackerTab] = useState<"not" | "yes">("not");
+  const [importOpen, setImportOpen] = useState(false);
+  const [draftStudents, setDraftStudents] = useState<string[]>([]);
+  const [savingStudents, setSavingStudents] = useState(false);
+  const [viewTab, setViewTab] = useState<"submitted" | "absent">("submitted");
   const printRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!formId || !user) return;
     loadReport();
+    loadTracker(formId);
   }, [formId, user]);
+
+  async function loadTracker(targetFormId: string) {
+    if (!targetFormId) return;
+    setTrackerLoading(true);
+    try {
+      const data = await getResponseTracker(targetFormId);
+      setTracker(data);
+    } catch (e: any) {
+      console.warn("Could not load response tracker:", e);
+    } finally {
+      setTrackerLoading(false);
+    }
+  }
+
+  async function saveStudents() {
+    if (!formId) return;
+    setSavingStudents(true);
+    try {
+      await updateExpectedStudents(formId, draftStudents);
+      setImportOpen(false);
+      setDraftStudents([]);
+      await loadTracker(formId);
+      await loadReport();
+    } catch (e: any) {
+      alert(e.message || "Could not save student list.");
+    } finally {
+      setSavingStudents(false);
+    }
+  }
 
   async function loadReport() {
     setLoading(true);
@@ -165,6 +207,7 @@ export default function FormReport() {
       const data = await res.json();
       if (!res.ok) { setError(data.error || "Failed to load report."); setLoading(false); return; }
       setReport(data);
+      if (data.tracker) setTracker(data.tracker);
       if (data.branches.length > 0) setActiveBranch("ALL");
     } catch (err: any) {
       setError(err.message || "Something went wrong.");
@@ -218,6 +261,21 @@ XLSX.utils.book_append_sheet(wb, wsAll, "All Students");
         const ws = XLSX.utils.aoa_to_sheet(data);
         XLSX.utils.book_append_sheet(wb, ws, branch.slice(0, 31));
       });
+
+      // Not Responded (Absent) sheet
+      if (tracker && tracker.notResponded && tracker.notResponded.length > 0) {
+        const absentData = [
+          ["Quiz Title", report.formTitle],
+          ["Total Expected Students", tracker.totalStudents],
+          ["Total Submitted", tracker.respondedCount],
+          ["Total Not Responded (Absent)", tracker.notRespondedCount],
+          [],
+          ["#", "Roll Number", "Status"],
+          ...tracker.notResponded.map((r, idx) => [idx + 1, r, "Not Responded / Absent"]),
+        ];
+        const wsAbsent = XLSX.utils.aoa_to_sheet(absentData);
+        XLSX.utils.book_append_sheet(wb, wsAbsent, "Not Responded (Absent)");
+      }
 
       XLSX.writeFile(wb, `${report.formTitle.replace(/[^a-z0-9]/gi, "_")}_report.xlsx`);
     } catch (err: any) {
@@ -373,6 +431,169 @@ XLSX.utils.book_append_sheet(wb, wsAll, "All Students");
                 </div>
               </div>
 
+              {/* ── Response Tracker (Who Filled vs Not Responded) ── */}
+              <section className="space-y-4">
+                {trackerLoading && (
+                  <div className="card flex items-center gap-3 p-5 text-sm text-ink/60 dark:text-[#F5EDE7]/60">
+                    <Loader2 className="h-4 w-4 animate-spin text-brand" /> Checking student responses...
+                  </div>
+                )}
+
+                {!trackerLoading && tracker && !tracker.hasExpectedList && (
+                  <div className="card p-5">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <h2 className="font-display text-lg font-bold">Response Tracker</h2>
+                        <p className="text-sm text-ink/60 dark:text-[#F5EDE7]/60">
+                          Import your student roll numbers to track which students filled the quiz and who has not responded.
+                        </p>
+                      </div>
+                      <button onClick={() => setImportOpen((o) => !o)} className="btn-secondary">
+                        <Users className="h-4 w-4" /> {importOpen ? "Cancel" : "Import student roster"}
+                      </button>
+                    </div>
+                    {importOpen && (
+                      <div className="mt-4 space-y-3">
+                        <StudentImport students={draftStudents} onChange={setDraftStudents} />
+                        <button
+                          onClick={saveStudents}
+                          disabled={!draftStudents.length || savingStudents}
+                          className="btn-primary"
+                        >
+                          {savingStudents ? "Saving..." : `Save ${draftStudents.length} students`}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {!trackerLoading && tracker && tracker.hasExpectedList && (
+                  <div className="card overflow-hidden p-0">
+                    <div className="border-b border-brand/10 p-5 dark:border-white/10">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <h2 className="font-display text-lg font-bold">Student Response Tracker</h2>
+                          <p className="text-xs text-ink/50 dark:text-[#F5EDE7]/50">
+                            Live attendance check: compares submitted quiz responses against your imported roster.
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => setImportOpen((o) => !o)}
+                            className="btn-ghost text-xs"
+                          >
+                            <Users className="h-3.5 w-3.5" /> {importOpen ? "Cancel" : "Edit roster"}
+                          </button>
+                          <button
+                            onClick={() => formId && loadTracker(formId)}
+                            className="btn-ghost text-xs"
+                          >
+                            🔄 Refresh
+                          </button>
+                        </div>
+                      </div>
+
+                      {importOpen && (
+                        <div className="mt-4 space-y-3 rounded-2xl border border-brand/10 bg-cream/30 p-4 dark:border-white/10 dark:bg-white/5">
+                          <StudentImport students={draftStudents} onChange={setDraftStudents} />
+                          <button
+                            onClick={saveStudents}
+                            disabled={!draftStudents.length || savingStudents}
+                            className="btn-primary"
+                          >
+                            {savingStudents ? "Saving..." : `Update roster (${draftStudents.length} students)`}
+                          </button>
+                        </div>
+                      )}
+
+                      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                        <div className="rounded-2xl border border-brand/10 bg-cream/60 p-4 dark:border-white/10 dark:bg-white/5">
+                          <div className="text-xs font-semibold uppercase tracking-wide text-ink/60 dark:text-[#F5EDE7]/60">
+                            Total expected
+                          </div>
+                          <div className="font-display text-2xl font-bold">{tracker.totalStudents}</div>
+                        </div>
+                        <div className="rounded-2xl border border-green-500/20 bg-green-50 p-4 dark:bg-green-950/20">
+                          <div className="text-xs font-semibold uppercase tracking-wide text-green-700 dark:text-green-300">
+                            Responded / Filled
+                          </div>
+                          <div className="font-display text-2xl font-bold text-green-700 dark:text-green-300">
+                            {tracker.respondedCount}
+                          </div>
+                        </div>
+                        <div className="rounded-2xl border border-red-500/25 bg-red-50 p-4 dark:bg-red-950/20">
+                          <div className="text-xs font-semibold uppercase tracking-wide text-red-700 dark:text-red-300">
+                            Not Responded / Absent
+                          </div>
+                          <div className="font-display text-2xl font-bold text-red-700 dark:text-red-300">
+                            {tracker.notRespondedCount}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="no-print mt-4 flex gap-2">
+                        <button
+                          onClick={() => setTrackerTab("not")}
+                          className={trackerTab === "not" ? "btn-primary" : "btn-secondary"}
+                        >
+                          🔴 Not responded — {tracker.notRespondedCount}
+                        </button>
+                        <button
+                          onClick={() => setTrackerTab("yes")}
+                          className={trackerTab === "yes" ? "btn-primary" : "btn-secondary"}
+                        >
+                          🟢 Responded — {tracker.respondedCount}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="p-5">
+                      {trackerTab === "not" ? (
+                        tracker.notResponded.length === 0 ? (
+                          <p className="text-sm font-semibold text-green-700 dark:text-green-300">
+                            🎉 Excellent! Every student in the roster has submitted the quiz.
+                          </p>
+                        ) : (
+                          <div>
+                            <p className="mb-2 text-xs font-semibold text-red-700 dark:text-red-300">
+                              Students who have NOT submitted this quiz:
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              {tracker.notResponded.map((r) => (
+                                <span
+                                  key={r}
+                                  className="rounded-lg border border-red-500/30 bg-red-50 px-2.5 py-1 font-mono text-xs font-semibold text-red-700 dark:bg-red-950/30 dark:text-red-300"
+                                >
+                                  {r}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )
+                      ) : tracker.responded.length === 0 ? (
+                        <p className="text-sm text-ink/60 dark:text-[#F5EDE7]/60">No responses recorded yet.</p>
+                      ) : (
+                        <div>
+                          <p className="mb-2 text-xs font-semibold text-green-700 dark:text-green-300">
+                            Students who submitted:
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            {tracker.responded.map((r) => (
+                              <span
+                                key={r}
+                                className="rounded-lg border border-green-500/30 bg-green-50 px-2.5 py-1 font-mono text-xs font-semibold text-green-700 dark:bg-green-950/30 dark:text-green-300"
+                              >
+                                ✓ {r}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </section>
+
               {/* Date filter */}
               <div className="no-print card p-4">
                 <div className="mb-3 flex items-center gap-2 text-sm font-bold">
@@ -508,53 +729,112 @@ XLSX.utils.book_append_sheet(wb, wsAll, "All Students");
                 </div>
               ) : (
                 <div className="card overflow-hidden">
-                  <div className="flex items-center justify-between border-b border-brand/5 px-5 py-3 dark:border-white/5">
+                  <div className="flex flex-wrap items-center justify-between border-b border-brand/5 px-5 py-3 dark:border-white/5 gap-3">
                     <h2 className="font-display font-bold">
                       {activeBranch === "ALL" ? "All students" : activeBranch}
                       <span className="ml-2 text-sm font-normal text-ink/50">
-                        ({displayStudents.length} students)
+                        ({viewTab === "absent" ? tracker?.notRespondedCount || 0 : displayStudents.length} students)
                       </span>
                     </h2>
+                    {tracker?.hasExpectedList && tracker.notRespondedCount > 0 && (
+                      <div className="no-print flex items-center gap-1 rounded-xl bg-cream/80 p-1 dark:bg-white/5">
+                        <button
+                          onClick={() => setViewTab("submitted")}
+                          className={`rounded-lg px-3 py-1 text-xs font-semibold transition ${
+                            viewTab === "submitted"
+                              ? "bg-brand text-white shadow-sm"
+                              : "text-ink/60 hover:text-ink dark:text-[#F5EDE7]/60"
+                          }`}
+                        >
+                          Submissions ({displayStudents.length})
+                        </button>
+                        <button
+                          onClick={() => setViewTab("absent")}
+                          className={`rounded-lg px-3 py-1 text-xs font-semibold transition ${
+                            viewTab === "absent"
+                              ? "bg-red-600 text-white shadow-sm"
+                              : "text-red-600 hover:text-red-700 dark:text-red-400"
+                          }`}
+                        >
+                          Not Responded ({tracker.notRespondedCount})
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-brand/5 bg-cream/50 dark:border-white/5 dark:bg-white/5">
-                          <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-ink/50">#</th>
-                          <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-ink/50">Roll No</th>
-                          <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-ink/50">Name</th>
-                          <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-ink/50">Branch</th>
-                          <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-ink/50">✅ Correct</th>
-                          <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-ink/50">❌ Wrong</th>
-                          <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-ink/50">Score</th>
-                          <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-ink/50">%</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {displayStudents.map((s, i) => (
-                          <tr
-                            key={s.responseId}
-                            className="border-b border-brand/5 transition hover:bg-brand/5 dark:border-white/5 dark:hover:bg-white/5"
-                          >
-                            <td className="px-4 py-3 text-xs text-ink/40">{i + 1}</td>
-                            <td className="px-4 py-3 font-mono text-xs font-semibold">{s.rollNo}</td>
-                            <td className="px-4 py-3 font-semibold">{s.name}</td>
-                            <td className="px-4 py-3 text-xs text-ink/60">{s.branch}</td>
-                            <td className="px-4 py-3 text-center font-semibold text-green-600">{s.correct}</td>
-                            <td className="px-4 py-3 text-center font-semibold text-red-500">{s.wrong}</td>
-                            <td className="px-4 py-3 text-center font-semibold">
-                              {s.score}/{s.totalPoints}
-                            </td>
-                            <td className="px-4 py-3 text-center">
-                              <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${gradeBg(s.percentage)} ${gradeColor(s.percentage)}`}>
-                                {s.percentage}%
-                              </span>
-                            </td>
+
+                  {viewTab === "absent" ? (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-brand/5 bg-red-50/50 dark:border-white/5 dark:bg-red-950/20">
+                            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-ink/50">#</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-ink/50">Roll No</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-ink/50">Status</th>
+                            <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-ink/50">Note</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                        </thead>
+                        <tbody>
+                          {tracker?.notResponded.map((r, i) => (
+                            <tr
+                              key={r}
+                              className="border-b border-brand/5 transition hover:bg-brand/5 dark:border-white/5 dark:hover:bg-white/5"
+                            >
+                              <td className="px-4 py-3 text-xs text-ink/40">{i + 1}</td>
+                              <td className="px-4 py-3 font-mono text-xs font-bold text-ink dark:text-[#F5EDE7]">{r}</td>
+                              <td className="px-4 py-3">
+                                <span className="rounded-full bg-red-50 px-2.5 py-1 text-xs font-bold text-red-600 dark:bg-red-950/30 dark:text-red-400">
+                                  🔴 Not Responded / Absent
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-right text-xs text-ink/50">
+                                No submission recorded
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-brand/5 bg-cream/50 dark:border-white/5 dark:bg-white/5">
+                            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-ink/50">#</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-ink/50">Roll No</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-ink/50">Name</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-ink/50">Branch</th>
+                            <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-ink/50">✅ Correct</th>
+                            <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-ink/50">❌ Wrong</th>
+                            <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-ink/50">Score</th>
+                            <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-ink/50">%</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {displayStudents.map((s, i) => (
+                            <tr
+                              key={s.responseId}
+                              className="border-b border-brand/5 transition hover:bg-brand/5 dark:border-white/5 dark:hover:bg-white/5"
+                            >
+                              <td className="px-4 py-3 text-xs text-ink/40">{i + 1}</td>
+                              <td className="px-4 py-3 font-mono text-xs font-semibold">{s.rollNo}</td>
+                              <td className="px-4 py-3 font-semibold">{s.name}</td>
+                              <td className="px-4 py-3 text-xs text-ink/60">{s.branch}</td>
+                              <td className="px-4 py-3 text-center font-semibold text-green-600">{s.correct}</td>
+                              <td className="px-4 py-3 text-center font-semibold text-red-500">{s.wrong}</td>
+                              <td className="px-4 py-3 text-center font-semibold">
+                                {s.score}/{s.totalPoints}
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${gradeBg(s.percentage)} ${gradeColor(s.percentage)}`}>
+                                  {s.percentage}%
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               )}
 

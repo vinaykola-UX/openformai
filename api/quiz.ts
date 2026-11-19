@@ -4,7 +4,7 @@ import { google } from "googleapis";
 import { FieldValue } from "firebase-admin/firestore";
 import { verifyAuth } from "./_lib/verify-auth.js";
 import { getAdmin } from "./_lib/firebase-admin.js";
-import { resolveExpectedStudents } from "./_lib/rosters.js";
+import { resolveExpectedStudents, ROLL_FIELD_REGEX } from "./_lib/rosters.js";
 import { oauthClient } from "./_lib/google-oauth.js";
 import { geminiWithFallback, isQuotaError, GEMINI_MODEL } from "./_lib/gemini-keys.js";
 import {
@@ -322,6 +322,20 @@ async function handleCreateForm(req: VercelRequest, res: VercelResponse) {
 
   const resolvedStudents = await resolveExpectedStudents(uid, expectedStudents, rosterId);
 
+  // Ensure a Roll Number question exists in the quiz so students can be tracked
+  const hasRoll = questions.some((q) => ROLL_FIELD_REGEX.test(q.title || ""));
+  const allQuestions = [...questions];
+  if (!hasRoll) {
+    allQuestions.unshift({
+      type: "SHORT",
+      title: "Roll Number",
+      required: true,
+      points: 0,
+      options: [],
+      correctAnswers: [],
+    });
+  }
+
   const client = oauthClient();
   client.setCredentials({ refresh_token: refreshToken });
   const forms = google.forms({ version: "v1", auth: client });
@@ -335,7 +349,7 @@ async function handleCreateForm(req: VercelRequest, res: VercelResponse) {
       updateSettings: { settings: { quizSettings: { isQuiz: true } }, updateMask: "quizSettings.isQuiz" },
     });
   }
-  questions.forEach((q, i) => requests.push(buildFormItem(q, i, isQuiz)));
+  allQuestions.forEach((q, i) => requests.push(buildFormItem(q, i, isQuiz)));
 
   await forms.forms.batchUpdate({ formId, requestBody: { requests } });
 
@@ -345,7 +359,7 @@ async function handleCreateForm(req: VercelRequest, res: VercelResponse) {
 
   await db.collection("forms").add({
     uid, title, googleFormId: formId, responderUri, editUri,
-    questionCount: questions.length, questions,
+    questionCount: allQuestions.length, questions: allQuestions,
     source: "ai-quiz", quizMode: isQuiz, isQuiz,
     expectedStudents: resolvedStudents,
     expiresAt: expiresAt ? new Date(expiresAt) : null,

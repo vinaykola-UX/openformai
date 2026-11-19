@@ -13,6 +13,9 @@ export function normalizeRoll(value: string): string {
   return String(value ?? "").trim().replace(/\s+/g, "").toUpperCase();
 }
 
+export const ROLL_FIELD_REGEX =
+  /(roll|register|registration|regd|reg\.?\s*(no|num)|htno|hall\s*ticket|admission\s*(no|number)|student\s*(id|no|number))/i;
+
 export function dedupeRollList(list: unknown): string[] {
   if (!Array.isArray(list)) return [];
   const seen = new Set<string>();

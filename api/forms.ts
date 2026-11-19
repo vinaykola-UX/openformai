@@ -9,7 +9,12 @@ import {
   saveRoster,
   deleteRoster,
   resolveExpectedStudents,
+  ROLL_FIELD_REGEX,
+  normalizeRoll,
+  dedupeRollList,
 } from "./_lib/rosters.js";
+
+const dedupeRolls = dedupeRollList;
 
 // ─────────────────────────────────────────────────────────────────────────
 // Shared types (used by "create-form")
@@ -718,7 +723,51 @@ async function handleFormReport(req: VercelRequest, res: VercelResponse) {
       : 0;
     const passed = studentResults.filter(r => r.percentage >= 50).length;
 
+    // Match submitted students against expectedStudents roster
+    const expectedStudents: string[] = dedupeRolls(storedForm.expectedStudents || []);
+    let tracker: {
+      hasExpectedList: boolean;
+      totalStudents: number;
+      respondedCount: number;
+      notRespondedCount: number;
+      responded: string[];
+      notResponded: string[];
+    } = {
+      hasExpectedList: false,
+      totalStudents: 0,
+      respondedCount: studentResults.length,
+      notRespondedCount: 0,
+      responded: studentResults.map(s => s.rollNo).filter(r => r && r !== "—"),
+      notResponded: [],
+    };
+
+    if (expectedStudents.length > 0) {
+      const expectedMap = new Map<string, string>();
+      expectedStudents.forEach((e) => expectedMap.set(normalizeRoll(e), e));
+
+      const submittedSet = new Set(
+        studentResults.map((s) => normalizeRoll(s.rollNo)).filter(Boolean)
+      );
+
+      const responded: string[] = [];
+      const notResponded: string[] = [];
+      for (const [key, original] of expectedMap) {
+        if (submittedSet.has(key)) responded.push(original);
+        else notResponded.push(original);
+      }
+
+      tracker = {
+        hasExpectedList: true,
+        totalStudents: expectedMap.size,
+        respondedCount: responded.length,
+        notRespondedCount: notResponded.length,
+        responded,
+        notResponded,
+      };
+    }
+
     return res.status(200).json({
+      formId: formQuery.docs[0].id,
       formTitle: formData.info?.title || "Quiz",
       totalStudents,
       totalQuestions: gradedQuestions.length,
@@ -731,6 +780,7 @@ async function handleFormReport(req: VercelRequest, res: VercelResponse) {
       students: studentResults,
       byBranch,
       branches: Object.keys(byBranch).sort(),
+      tracker,
     });
   } catch (err: any) {
     console.error("form-report error", err);
@@ -1032,6 +1082,9 @@ async function handleResponseTracker(req: VercelRequest, res: VercelResponse) {
           const v = answers[key]?.textAnswers?.answers?.[0]?.value;
           if (v) submittedRaw.push(v);
         }
+      }
+      if (r.respondentEmail) {
+        submittedRaw.push(r.respondentEmail);
       }
     }
 
