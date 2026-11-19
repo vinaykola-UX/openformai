@@ -11,6 +11,10 @@ import {
   CACHE_TTL_MS,
   makeCacheKey,
   buildQuestionsPrompt,
+  buildBloomPrompt,
+  parseLevelCounts,
+  arrangeBloomQuestions,
+  withLevelTag,
   runGeminiQuestions,
   runGroqQuestions,
 } from "./_lib/quiz-shared.js";
@@ -131,8 +135,8 @@ async function handleAnalyze(req: VercelRequest, res: VercelResponse) {
 async function handleGenerate(req: VercelRequest, res: VercelResponse) {
   try {
     const { uid } = await verifyAuth(req);
-    const { text, count = 5, difficulty = "Mixed", questionType = "Mixed" } = (req.body || {}) as {
-      text?: string; count?: number; difficulty?: string; questionType?: string;
+    const { text, count = 5, difficulty = "Mixed", questionType = "Mixed", levelCounts } = (req.body || {}) as {
+      text?: string; count?: number; difficulty?: string; questionType?: string; levelCounts?: Record<string, number>;
     };
     if (!text || text.trim().length < 40) {
       return res.status(400).json({ error: "Need study material to generate a quiz." });
@@ -144,14 +148,22 @@ async function handleGenerate(req: VercelRequest, res: VercelResponse) {
       });
     }
 
+    // Bloom settings: null = normal (old) flow. Invalid Bloom settings = 400.
+    let bloom: ReturnType<typeof parseLevelCounts> = null;
+    try {
+      bloom = parseLevelCounts(levelCounts);
+    } catch (e: any) {
+      return res.status(400).json({ error: e.message || "Invalid Bloom level settings." });
+    }
+
     // Rate limit before hitting any AI
     await checkAIRateLimit(uid, "quiz-generate");
 
-    const n = Math.max(1, Math.min(100, Number(count) || 5));
+    const n = bloom ? bloom.total : Math.max(1, Math.min(100, Number(count) || 5));
     const groqKey = process.env.GROQ_API_KEY;
     const { db } = getAdmin();
 
-    const cacheKey = makeCacheKey(text, n, difficulty, questionType);
+    const cacheKey = makeCacheKey(text, n, difficulty, questionType, bloom?.counts);
     const cacheRef = db.collection("quiz_cache").doc(cacheKey);
     const cacheSnap = await cacheRef.get();
 
@@ -164,12 +176,13 @@ async function handleGenerate(req: VercelRequest, res: VercelResponse) {
       await cacheRef.delete();
     }
 
-    const prompt = buildQuestionsPrompt(text, n, difficulty, questionType);
+    const prompt = bloom ? buildBloomPrompt(text, bloom.counts) : buildQuestionsPrompt(text, n, difficulty, questionType);
+    const aiOpts = bloom ? { bloom: true } : undefined;
     let questions: any[] | null = null;
     let usedModel = "";
 
     try {
-      questions = await runGeminiQuestions(prompt);
+      questions = await runGeminiQuestions(prompt, aiOpts);
       usedModel = GEMINI_MODEL;
     } catch (geminiErr: any) {
       if (!(isQuotaError(geminiErr) || geminiErr?.allKeysExhausted)) {
@@ -179,11 +192,16 @@ async function handleGenerate(req: VercelRequest, res: VercelResponse) {
 
     if (!questions && groqKey) {
       try {
-        questions = await runGroqQuestions(prompt, groqKey);
+        questions = await runGroqQuestions(prompt, groqKey, aiOpts);
         usedModel = "groq-llama-3.3-70b";
       } catch (groqErr: any) {
         console.error("[quiz:generate] Groq error:", groqErr.message);
       }
+    }
+
+    // Bloom: group by level, cap per level, order BL1 → BL6
+    if (bloom && questions) {
+      questions = arrangeBloomQuestions(questions, bloom.counts);
     }
 
     if (!questions || questions.length === 0) {
@@ -218,11 +236,14 @@ type QuizQuestion = {
   explanation?: string;
   points?: number;
   required?: boolean;
+  level?: number;
 };
 
 function buildFormItem(q: QuizQuestion, index: number, isQuiz: boolean) {
   const required = q.required ?? true;
   const points = Math.max(0, Math.round(q.points ?? 1));
+  // Adds "[BL3] " in front for Bloom questions; unchanged for everything else.
+  const itemTitle = withLevelTag(q.title, q.level);
 
   const grading = isQuiz
     ? {
@@ -237,7 +258,7 @@ function buildFormItem(q: QuizQuestion, index: number, isQuiz: boolean) {
     return {
       createItem: {
         item: {
-          title: q.title,
+          title: itemTitle,
           questionItem: {
             question: {
               required,
@@ -256,7 +277,7 @@ function buildFormItem(q: QuizQuestion, index: number, isQuiz: boolean) {
   return {
     createItem: {
       item: {
-        title: q.title,
+        title: itemTitle,
         questionItem: {
           question: {
             required,
