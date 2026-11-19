@@ -75,10 +75,10 @@ export default function UnlockDialog({
           </div>
           Request one by emailing{" "}
           <a
-            href="mailto:teamspendly@gmail.com?subject=OpenForm%20unlock%20passcode%20request"
+            href="mailto:vkola306@gmail.com?subject=OpenForm%20unlock%20passcode%20request"
             className="font-semibold text-brand underline"
           >
-            teamspendly@gmail.com
+            vkola306@gmail.com
           </a>
           .
         </div>

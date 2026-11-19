@@ -84,10 +84,10 @@ export default function Privacy() {
                 If you have questions about this Privacy Policy, please reach
                 out to us at{" "}
                 <a
-                  href="mailto:teamclassvision@gmail.com"
+                  href="mailto:vkola306@gmail.com"
                   className="font-medium text-brand underline underline-offset-2 hover:opacity-80"
                 >
-                  teamclassvision@gmail.com
+                  vkola306@gmail.com
                 </a>
                 .
               </Section>

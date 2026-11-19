@@ -88,10 +88,10 @@ export default function Terms() {
               <Section title="10. Contact Us">
                 For questions about these Terms, please contact us at{" "}
                 <a
-                  href="mailto:teamclassvision@gmail.com"
+                  href="mailto:vkola306@gmail.com"
                   className="font-medium text-brand underline underline-offset-2 hover:opacity-80"
                 >
-                  teamclassvision@gmail.com
+                  vkola306@gmail.com
                 </a>
                 .
               </Section>
