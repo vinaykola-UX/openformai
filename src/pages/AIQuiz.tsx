@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   ArrowLeft, Upload, Link2, Loader2, Sparkles, Wand2, Brain,
-  CheckCircle2, ExternalLink, BookOpen, Target, Plus, Trash2,
+  CheckCircle2, ExternalLink, BookOpen, Target, Plus, Minus, Trash2,
   Copy, ChevronDown, Download, Globe,
 } from "lucide-react";
 import AppShell from "../components/AppShell";
@@ -27,6 +27,20 @@ const QTYPES = [
   { v: "TRUE_FALSE", label: "True / False" },
   { v: "SHORT", label: "Short Answer" },
   { v: "PARAGRAPH", label: "Paragraph" },
+];
+const MAX_BLOOM_TOTAL = 30;
+const BLOOM_LEVELS = [
+  { level: 1, name: "Remember" },
+  { level: 2, name: "Understand" },
+  { level: 3, name: "Apply" },
+  { level: 4, name: "Analyze" },
+  { level: 5, name: "Evaluate" },
+  { level: 6, name: "Create" },
+];
+const BLOOM_PRESETS: { label: string; counts: Record<number, number> }[] = [
+  { label: "Easy (BL1-2)", counts: { 1: 4, 2: 4, 3: 0, 4: 0, 5: 0, 6: 0 } },
+  { label: "Exam style (BL1-4)", counts: { 1: 3, 2: 3, 3: 2, 4: 2, 5: 0, 6: 0 } },
+  { label: "Full (BL1-6)", counts: { 1: 2, 2: 2, 3: 2, 4: 2, 5: 1, 6: 1 } },
 ];
 
 export default function AIQuiz() {
@@ -54,6 +68,18 @@ export default function AIQuiz() {
   const [mode, setMode] = useState<"quiz" | "form">("quiz");
   const [expiresAt, setExpiresAt] = useState<string>("");
   const [expectedStudents, setExpectedStudents] = useState<string[]>([]);
+  const [bloomOn, setBloomOn] = useState(false);
+  const [levelCounts, setLevelCounts] = useState<Record<number, number>>({ 1: 3, 2: 3, 3: 2, 4: 2, 5: 0, 6: 0 });
+  const bloomTotal = Object.values(levelCounts).reduce((a, b) => a + b, 0);
+
+  function changeLevel(level: number, delta: number) {
+    setLevelCounts((prev) => {
+      const next = Math.max(0, Math.min(10, (prev[level] || 0) + delta));
+      const total = bloomTotal - (prev[level] || 0) + next;
+      if (total > MAX_BLOOM_TOTAL) return prev;
+      return { ...prev, [level]: next };
+    });
+  }
 
   const [questions, setQuestions] = useState<QuizQuestion[] | null>(null);
   const [generating, setGenerating] = useState(false);
@@ -131,7 +157,15 @@ export default function AIQuiz() {
     setError(""); setGenerating(true);
     try {
       const n = customCount ? Math.max(1, Math.min(100, Number(customCount) || 10)) : count;
-      const { questions: qs } = await generateQuiz({ text, count: n, difficulty, questionType: qType });
+      const { questions: qs } = bloomOn
+        ? await generateQuiz({
+            text,
+            count: bloomTotal,
+            difficulty: "Mixed",
+            questionType: "MCQ",
+            levelCounts: Object.fromEntries(Object.entries(levelCounts).map(([k, v]) => [k, v])),
+          })
+        : await generateQuiz({ text, count: n, difficulty, questionType: qType });
       const defaults: QuizQuestion[] = [
         { type: "SHORT", title: "Email ID", required: true, points: 0 },
         { type: "SHORT", title: "Full Name", required: true, points: 0 },
@@ -255,8 +289,6 @@ export default function AIQuiz() {
       doc.save(`${safe}.pdf`);
     }
   }
-
-
   // ─── Result screen ─────────────────────────────────────────────
   if (step === "result" && result) {
     return (
@@ -319,7 +351,8 @@ export default function AIQuiz() {
             <ErrorCard error={error} onDismiss={() => setError("")} />
           </div>
         )}
-{step === "input" && (
+
+        {step === "input" && (
           <>
             <div className="card p-6 sm:p-8">
               <h2 className="font-display text-lg font-bold flex items-center gap-2">
@@ -419,28 +452,78 @@ export default function AIQuiz() {
                 <div className="mt-6 border-t border-brand/10 pt-6 dark:border-white/10">
                   <h3 className="font-display text-base font-bold flex items-center gap-2"><Target className="h-4 w-4 text-brand" /> Quiz options</h3>
                   <div className="mt-4 space-y-4">
-                    <div>
-                      <label className="label">Number of questions</label>
-                      <div className="flex flex-wrap gap-2">
-                        {COUNT_OPTIONS.map((n) => (
-                          <button key={n} type="button" onClick={() => { setCount(n); setCustomCount(""); }}
-                            className={`rounded-full px-4 py-1.5 text-xs font-semibold transition ${
-                              !customCount && count === n ? "bg-brand text-white" : "bg-peach/40 text-brand-700 hover:bg-peach/60"
-                            }`}>{n}</button>
-                        ))}
-                        <input type="number" min={1} max={100} value={customCount}
-                          onChange={(e) => setCustomCount(e.target.value)}
-                          placeholder="Custom"
-                          className="w-24 rounded-full border border-brand/20 bg-white dark:bg-[#241218] px-3 py-1.5 text-xs outline-none focus:border-brand" />
+                    <PillGroup label="Question style" value={bloomOn ? "bloom" : "normal"}
+                      options={[{ v: "normal", label: "Normal" }, { v: "bloom", label: "Bloom's Taxonomy (JNTUK)" }]}
+                      onChange={(v) => setBloomOn(v === "bloom")} />
+
+                    {bloomOn ? (
+                      <div className="rounded-2xl border border-brand/15 bg-cream/60 p-4 dark:border-white/10 dark:bg-white/5">
+                        <label className="label">Quick presets</label>
+                        <div className="flex flex-wrap gap-2">
+                          {BLOOM_PRESETS.map((p) => (
+                            <button key={p.label} type="button" onClick={() => setLevelCounts(p.counts)}
+                              className="rounded-full bg-peach/40 px-4 py-1.5 text-xs font-semibold text-brand-700 hover:bg-peach/60">
+                              {p.label}
+                            </button>
+                          ))}
+                        </div>
+
+                        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                          {BLOOM_LEVELS.map((b) => (
+                            <div key={b.level} className="flex items-center justify-between rounded-xl bg-white px-3 py-2 dark:bg-[#241218]">
+                              <span className="text-xs font-semibold text-ink dark:text-[#F5EDE7]">
+                                BL{b.level} · {b.name}
+                              </span>
+                              <div className="flex items-center gap-2">
+                                <button type="button" onClick={() => changeLevel(b.level, -1)}
+                                  disabled={(levelCounts[b.level] || 0) <= 0}
+                                  className="grid h-6 w-6 place-items-center rounded-full bg-peach/40 text-brand-700 disabled:opacity-30">
+                                  <Minus className="h-3 w-3" />
+                                </button>
+                                <span className="w-5 text-center text-sm font-bold">{levelCounts[b.level] || 0}</span>
+                                <button type="button" onClick={() => changeLevel(b.level, 1)}
+                                  disabled={bloomTotal >= MAX_BLOOM_TOTAL || (levelCounts[b.level] || 0) >= 10}
+                                  className="grid h-6 w-6 place-items-center rounded-full bg-peach/40 text-brand-700 disabled:opacity-30">
+                                  <Plus className="h-3 w-3" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        <p className="mt-3 text-xs font-semibold text-ink/70 dark:text-[#F5EDE7]/70">
+                          Total: {bloomTotal} / {MAX_BLOOM_TOTAL} · all multiple choice · sorted BL1 → BL6
+                        </p>
                       </div>
-                    </div>
-                    <PillGroup label="Difficulty" value={difficulty} options={DIFFICULTIES.map((d) => ({ v: d, label: d }))} onChange={setDifficulty} />
-                    <PillGroup label="Question types" value={qType} options={QTYPES} onChange={setQType} />
+                    ) : (
+                      <>
+                        <div>
+                          <label className="label">Number of questions</label>
+                          <div className="flex flex-wrap gap-2">
+                            {COUNT_OPTIONS.map((n) => (
+                              <button key={n} type="button" onClick={() => { setCount(n); setCustomCount(""); }}
+                                className={`rounded-full px-4 py-1.5 text-xs font-semibold transition ${
+                                  !customCount && count === n ? "bg-brand text-white" : "bg-peach/40 text-brand-700 hover:bg-peach/60"
+                                }`}>{n}</button>
+                            ))}
+                            <input type="number" min={1} max={100} value={customCount}
+                              onChange={(e) => setCustomCount(e.target.value)}
+                              placeholder="Custom"
+                              className="w-24 rounded-full border border-brand/20 bg-white dark:bg-[#241218] px-3 py-1.5 text-xs outline-none focus:border-brand" />
+                          </div>
+                        </div>
+                        <PillGroup label="Difficulty" value={difficulty} options={DIFFICULTIES.map((d) => ({ v: d, label: d }))} onChange={setDifficulty} />
+                        <PillGroup label="Question types" value={qType} options={QTYPES} onChange={setQType} />
+                      </>
+                    )}
+
                     <PillGroup label="Form mode" value={mode}
                       options={[{ v: "quiz", label: "Google Quiz (graded)" }, { v: "form", label: "Normal Google Form" }]}
                       onChange={(v) => setMode(v as "quiz" | "form")} />
                   </div>
-                  <button onClick={runGenerate} disabled={generating} className="btn-primary mt-6">
+                  <button onClick={runGenerate}
+                    disabled={generating || (bloomOn && (bloomTotal === 0 || bloomTotal > MAX_BLOOM_TOTAL))}
+                    className="btn-primary mt-6">
                     {generating ? <><Sparkles className="h-4 w-4 animate-pulse" /> Generating quiz...</> : <><Wand2 className="h-4 w-4" /> Generate quiz</>}
                   </button>
                 </div>
@@ -541,7 +624,6 @@ export default function AIQuiz() {
     </AppShell>
   );
 }
-
 // ─── Sub-components ──────────────────────────────────────────────
 
 function SummaryRow({ label, value }: { label: string; value: string }) {
@@ -611,6 +693,7 @@ function ExportMenu({ onExport }: { onExport: (f: "json" | "txt" | "md" | "csv" 
     </div>
   );
 }
+
 function QuizCard({
   q, index, total, onChange, onDelete, onDuplicate, onMoveUp, onMoveDown,
 }: {
@@ -664,6 +747,12 @@ function QuizCard({
               <option value="SHORT">Short answer</option>
               <option value="PARAGRAPH">Paragraph</option>
             </select>
+
+            {q.level && (
+              <span className="rounded-full bg-brand/10 px-3 py-1 text-xs font-bold text-brand">
+                BL{q.level}
+              </span>
+            )}
 
             <label className="flex items-center gap-1 text-xs text-ink/60 dark:text-[#F5EDE7]/60">
               Points
