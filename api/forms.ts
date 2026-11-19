@@ -11,10 +11,8 @@ import {
   resolveExpectedStudents,
   ROLL_FIELD_REGEX,
   normalizeRoll,
-  dedupeRollList,
+  dedupeRollList as dedupeRolls,
 } from "./_lib/rosters.js";
-
-const dedupeRolls = dedupeRollList;
 
 // ─────────────────────────────────────────────────────────────────────────
 // Shared types (used by "create-form")
@@ -969,29 +967,6 @@ async function handleOverallReport(req: VercelRequest, res: VercelResponse) {
   }
 }
 
-
-// ─────────────────────────────────────────────────────────────────────────
-// Response Tracker helpers
-// ─────────────────────────────────────────────────────────────────────────
-
-function normalizeRoll(value: string): string {
-  return String(value ?? "").trim().replace(/\s+/g, "").toUpperCase();
-}
-
-function dedupeRolls(list: string[]): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const item of list || []) {
-    const key = normalizeRoll(item);
-    if (!key || seen.has(key)) continue;
-    seen.add(key);
-    out.push(String(item).trim());
-  }
-  return out;
-}
-
-const ROLL_FIELD_REGEX =
-  /(roll|register|registration|regd|reg\.?\s*(no|num)|htno|hall\s*ticket|admission\s*(no|number))/i;
 
 // action: "expected-students" — replace the imported list for an existing form
 async function handleExpectedStudents(req: VercelRequest, res: VercelResponse) {
