@@ -1,6 +1,7 @@
 // api/_lib/gemini-keys.ts
 // Regular round-robin rotation across all Gemini API keys.
-// Distributes traffic evenly and automatically falls back to the next key if quota is hit.
+// Automatically falls back to the next key if a key is rate limited (429)
+// or blocked (403 / free tier unavailable / invalid key).
 
 import { GoogleGenAI } from "@google/genai";
 
@@ -45,6 +46,22 @@ export function isQuotaError(err: any): boolean {
   );
 }
 
+// Key whose Google project is blocked, has no free tier, or is invalid.
+// Another key may still work, so we rotate instead of failing immediately.
+export function isKeyBlockedError(err: any): boolean {
+  const msg = (err?.message || "").toLowerCase();
+  const status = err?.status || err?.code || err?.error?.code;
+  return (
+    status === 403 ||
+    status === "PERMISSION_DENIED" ||
+    msg.includes("403") ||
+    msg.includes("permission_denied") ||
+    msg.includes("free tier is not available") ||
+    msg.includes("api key not valid") ||
+    msg.includes("api_key_invalid")
+  );
+}
+
 export async function geminiWithFallback(
   buildRequest: (ai: GoogleGenAI) => Promise<any>
 ): Promise<any> {
@@ -76,12 +93,21 @@ export async function geminiWithFallback(
         console.warn(`[gemini] key ${keyIdx + 1} quota/rate limited, rotating to next key...`);
         continue;
       }
+      if (isKeyBlockedError(err)) {
+        console.warn(`[gemini] key ${keyIdx + 1} blocked (403), rotating to next key...`);
+        continue;
+      }
       throw err;
     }
   }
 
   console.error("[gemini] all keys exhausted or failed", lastError);
-  const exhaustedErr = new Error("All Gemini keys quota exhausted. Please try again shortly.") as any;
+  const blocked = isKeyBlockedError(lastError);
+  const exhaustedErr = new Error(
+    blocked
+      ? "All Gemini API keys are blocked (free tier unavailable). Please add a valid key."
+      : "All Gemini keys quota exhausted. Please try again shortly."
+  ) as any;
   exhaustedErr.allKeysExhausted = true;
   exhaustedErr.isQuota = true;
   exhaustedErr.originalError = lastError;
