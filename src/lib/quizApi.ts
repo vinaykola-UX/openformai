@@ -49,6 +49,7 @@ export type QuizQuestion = {
   points?: number;
   difficulty?: "Easy" | "Medium" | "Hard";
   required?: boolean;
+  level?: number; // Bloom level 1–6 (optional, only on Bloom quizzes)
 };
 
 export const analyzeMaterial = (text: string) =>
@@ -64,6 +65,7 @@ export const generateQuiz = (opts: {
   count: number;
   difficulty: string;
   questionType: string;
+  levelCounts?: Record<string, number>; // e.g. { "1": 3, "2": 3, "3": 2 }
 }) => call<{ questions: QuizQuestion[] }>("/api/quiz", "generate", opts);
 
 export const createQuizForm = (opts: {
