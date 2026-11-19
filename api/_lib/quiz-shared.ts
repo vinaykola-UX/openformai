@@ -45,13 +45,156 @@ Rules:
 // it's folded into the cache key so old cached questions (generated under the
 // previous prompt/schema) are never served again; a version bump makes every
 // old cache entry simply not match anymore, so generation runs fresh instead.
+// (Unchanged on purpose: the Bloom feature below does not alter the old prompt.)
 const PROMPT_VERSION = "v2";
 
 export const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
-export function makeCacheKey(text: string, count: number, difficulty: string, questionType: string) {
-  const raw = `${PROMPT_VERSION}|${text.slice(0, 40000)}|${count}|${difficulty}|${questionType}`;
+// ─────────────────────────────────────────────────────────────────────────
+// Bloom's Taxonomy (JNTUK BL1–BL6) — additive. Nothing here runs unless a
+// request explicitly sends levelCounts.
+// ─────────────────────────────────────────────────────────────────────────
+
+export const MAX_BLOOM_TOTAL = 30;
+
+export const BLOOM_LEVELS = [
+  { level: 1, name: "Remember", verbs: "define, list, state, identify, name, recall, match" },
+  { level: 2, name: "Understand", verbs: "explain, describe, summarize, classify, illustrate, compare" },
+  { level: 3, name: "Apply", verbs: "apply, solve, use, compute, demonstrate, predict the output of" },
+  { level: 4, name: "Analyze", verbs: "analyze, differentiate, examine, distinguish, trace, find the error in" },
+  { level: 5, name: "Evaluate", verbs: "evaluate, justify, assess, critique, choose the best, recommend" },
+  { level: 6, name: "Create", verbs: "design, construct, formulate, propose, develop, compose" },
+] as const;
+
+export type LevelCounts = Record<number, number>;
+
+export function normalizeLevel(x: unknown): number | null {
+  const n = Number(x);
+  return Number.isInteger(n) && n >= 1 && n <= 6 ? n : null;
+}
+
+/**
+ * Returns null when the request is NOT a Bloom request (levelCounts missing).
+ * Throws an Error with a teacher-readable message when it IS but is invalid.
+ */
+export function parseLevelCounts(raw: any): { counts: LevelCounts; total: number } | null {
+  if (raw === undefined || raw === null) return null;
+  if (typeof raw !== "object" || Array.isArray(raw)) throw new Error("Invalid Bloom level settings.");
+  const counts: LevelCounts = {};
+  let total = 0;
+  for (let l = 1; l <= 6; l++) {
+    const v = Math.floor(Number(raw[String(l)] ?? 0));
+    const n = Number.isFinite(v) ? Math.max(0, Math.min(MAX_BLOOM_TOTAL, v)) : 0;
+    if (n > 0) {
+      counts[l] = n;
+      total += n;
+    }
+  }
+  if (total === 0) throw new Error("Pick at least one question for a Bloom level.");
+  if (total > MAX_BLOOM_TOTAL) {
+    throw new Error(`Bloom quizzes are limited to ${MAX_BLOOM_TOTAL} questions in total.`);
+  }
+  return { counts, total };
+}
+
+export function makeCacheKey(
+  text: string,
+  count: number,
+  difficulty: string,
+  questionType: string,
+  levelCounts?: LevelCounts
+) {
+  let raw = `${PROMPT_VERSION}|${text.slice(0, 40000)}|${count}|${difficulty}|${questionType}`;
+  // Only Bloom requests extend the key, so every existing cache entry stays valid.
+  if (levelCounts) {
+    raw += `|bloom:${[1, 2, 3, 4, 5, 6].map((l) => levelCounts[l] || 0).join(",")}`;
+  }
   return createHash("sha256").update(raw).digest("hex");
+}
+
+export const BLOOM_SCHEMA = {
+  ...QUESTIONS_SCHEMA,
+  properties: {
+    questions: {
+      type: Type.ARRAY,
+      items: {
+        ...QUESTIONS_SCHEMA.properties.questions.items,
+        properties: {
+          ...QUESTIONS_SCHEMA.properties.questions.items.properties,
+          level: { type: Type.NUMBER },
+        },
+        required: ["type", "title", "correctAnswers", "level"],
+      },
+    },
+  },
+  required: ["questions"],
+};
+
+const BLOOM_SYSTEM_EXTRA = `
+
+BLOOM'S TAXONOMY MODE (JNTUK, levels BL1–BL6):
+- Every question MUST be type "MCQ" and MUST include an integer field "level" (1 to 6).
+- Write each question at the cognitive level requested, using that level's action verbs:
+${BLOOM_LEVELS.map((b) => `  BL${b.level} ${b.name}: ${b.verbs}`).join("\n")}
+- BL1/BL2 may test definitions and explanations stated in the material.
+- BL3 (Apply): short problems, calculations, or "what is the output" using concepts from the material.
+- BL4 (Analyze): compare, trace, find the error, or identify the cause.
+- BL5 (Evaluate): choose the best option and justify it; the explanation must say why the others are weaker.
+- BL6 (Create): "which design / approach / formulation is correct or best" — still answerable as ONE correct option.
+- Higher levels must still rely only on concepts present in the material; do not require outside facts.
+- If a question involves code, put the short code snippet inside the question "title" (use line breaks). For "output" questions, put the possible outputs in the options. Keep every option to one short line.
+- All 4 options must be plausible (same format and length); wrong options should reflect real student misconceptions, not obviously silly answers.
+- Never write "all of the above" or "none of the above".
+- Respond with JSON shaped exactly like {"questions":[{"type":"MCQ","title":"...","options":["...","...","...","..."],"correctAnswers":["..."],"explanation":"...","level":1}]}.`;
+
+export function buildBloomPrompt(text: string, counts: LevelCounts) {
+  const total = Object.values(counts).reduce((a, b) => a + b, 0);
+  const lines = BLOOM_LEVELS.filter((b) => counts[b.level] > 0)
+    .map((b) => `- BL${b.level} (${b.name}): exactly ${counts[b.level]} question(s), level = ${b.level}`)
+    .join("\n");
+
+  return `Generate exactly ${total} MCQ quiz questions from the study material below, distributed by Bloom's Taxonomy level like this:
+${lines}
+
+Every question must have the correct "level" value and a non-empty correctAnswers array whose value exactly matches one of its options.
+
+STUDY MATERIAL:
+"""
+${text.slice(0, 40000)}
+"""`;
+}
+
+/** Group by level, cap each level at the requested count, order BL1 → BL6. */
+export function arrangeBloomQuestions(questions: any[], counts: LevelCounts): any[] {
+  const buckets: Record<number, any[]> = {};
+  for (const q of questions || []) {
+    const lv = normalizeLevel(q?.level);
+    if (!lv || !counts[lv]) continue;
+    if (!buckets[lv]) buckets[lv] = [];
+    buckets[lv].push(q);
+  }
+  const out: any[] = [];
+  for (let l = 1; l <= 6; l++) {
+    const picked = (buckets[l] || []).slice(0, counts[l] || 0);
+    for (const q of picked) {
+      out.push({
+        ...q,
+        type: "MCQ",
+        level: l,
+        difficulty: l <= 2 ? "Easy" : l <= 4 ? "Medium" : "Hard",
+        points: l <= 2 ? 1 : l <= 4 ? 2 : 3,
+      });
+    }
+  }
+  return out;
+}
+
+/** "[BL3] question text" — used only when the form is built. Never double-tags. */
+export function withLevelTag(title: string, level: unknown): string {
+  const lv = normalizeLevel(level);
+  if (!lv) return title;
+  if (/^\s*\[BL[1-6]\]/i.test(title)) return title;
+  return `[BL${lv}] ${title}`;
 }
 
 export function buildQuestionsPrompt(
@@ -83,7 +226,7 @@ ${text.slice(0, 40000)}
 """`;
 }
 
-export function parseQuestions(raw: any[]): any[] {
+export function parseQuestions(raw: any[], keepLevel = false): any[] {
   return (raw || []).map((q: any) => {
     const options: string[] = q.options || [];
     let correctAnswers: string[] = (q.correctAnswers || []).filter(
@@ -103,6 +246,8 @@ export function parseQuestions(raw: any[]): any[] {
       });
     }
 
+    const lv = keepLevel ? normalizeLevel(q.level) : null;
+
     return {
       type: q.type,
       title: q.title,
@@ -112,33 +257,43 @@ export function parseQuestions(raw: any[]): any[] {
       points: q.points ?? (q.difficulty === "Hard" ? 3 : q.difficulty === "Easy" ? 1 : 2),
       difficulty: q.difficulty || "Medium",
       required: true,
+      ...(lv ? { level: lv } : {}),
     };
   });
 }
 
-export async function runGeminiQuestions(prompt: string): Promise<any[]> {
+export async function runGeminiQuestions(prompt: string, opts?: { bloom?: boolean }): Promise<any[]> {
+  const bloom = !!opts?.bloom;
   const response = await geminiWithFallback((ai) =>
     ai.models.generateContent({
       model: GEMINI_MODEL,
       contents: [{ role: "user", parts: [{ text: prompt }] }],
       config: {
-        systemInstruction: QUESTIONS_SYSTEM,
+        systemInstruction: bloom ? QUESTIONS_SYSTEM + BLOOM_SYSTEM_EXTRA : QUESTIONS_SYSTEM,
         responseMimeType: "application/json",
-        responseSchema: QUESTIONS_SCHEMA as any,
+        responseSchema: (bloom ? BLOOM_SCHEMA : QUESTIONS_SCHEMA) as any,
       },
     })
   );
   const parsed = JSON.parse(response.text || "{}");
-  return parseQuestions(parsed.questions);
+  return parseQuestions(parsed.questions, bloom);
 }
 
-export async function runGroqQuestions(prompt: string, apiKey: string): Promise<any[]> {
+export async function runGroqQuestions(
+  prompt: string,
+  apiKey: string,
+  opts?: { bloom?: boolean }
+): Promise<any[]> {
+  const bloom = !!opts?.bloom;
   const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
       model: "llama-3.3-70b-versatile",
-      messages: [{ role: "system", content: QUESTIONS_SYSTEM }, { role: "user", content: prompt }],
+      messages: [
+        { role: "system", content: bloom ? QUESTIONS_SYSTEM + BLOOM_SYSTEM_EXTRA : QUESTIONS_SYSTEM },
+        { role: "user", content: prompt },
+      ],
       response_format: { type: "json_object" },
       temperature: 0.3,
     }),
@@ -149,5 +304,5 @@ export async function runGroqQuestions(prompt: string, apiKey: string): Promise<
   }
   const data = await res.json();
   const content = data.choices?.[0]?.message?.content || "{}";
-  return parseQuestions(JSON.parse(content).questions);
+  return parseQuestions(JSON.parse(content).questions, bloom);
 }
