@@ -4,6 +4,7 @@ import { verifyAuth } from "./_lib/verify-auth.js";
 import { extractContent } from "./_lib/extract-content.js";
 import { parseQuestions } from "../src/lib/questionParser.js";
 import { geminiWithFallback, isQuotaError, GEMINI_MODEL } from "./_lib/gemini-keys.js";
+import { checkAIRateLimit, RateLimitError, rateLimitResponse } from "./_lib/rate-limit.js";
 
 export const config = {
   api: {
@@ -18,13 +19,26 @@ export const config = {
 async function handleExtract(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
   try {
-    await verifyAuth(req);
+    const { uid } = await verifyAuth(req);
     const { filename, mimeType, data } = (req.body || {}) as {
       filename?: string;
       mimeType?: string;
       data?: string;
     };
     if (!data) return res.status(400).json({ error: "Missing file data" });
+
+    // Only rate-limit if the file type requires Gemini OCR (images / scanned PDFs)
+    const name = (filename || "").toLowerCase();
+    const mt = (mimeType || "").toLowerCase();
+    const needsOCR =
+      mt.startsWith("image/") ||
+      /\.(png|jpe?g|webp|gif|bmp|heic|heif)$/i.test(name) ||
+      mt.includes("pdf") ||
+      name.endsWith(".pdf");
+
+    if (needsOCR) {
+      await checkAIRateLimit(uid, "extract-ocr");
+    }
 
     const buf = Buffer.from(data, "base64");
     const text = await extractContent(buf, mimeType || "", filename || "");
@@ -33,6 +47,9 @@ async function handleExtract(req: VercelRequest, res: VercelResponse) {
     console.log(`[extract] ${filename} (${mimeType}) -> ${text.length} chars`);
     return res.status(200).json({ text });
   } catch (err: any) {
+    if (err instanceof RateLimitError) {
+      return res.status(429).json(rateLimitResponse(err));
+    }
     console.error("[extract] error", err);
     return res.status(500).json({ error: err.message || "Extraction failed" });
   }
@@ -261,7 +278,7 @@ async function handleGenerate(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
   try {
-    await verifyAuth(req);
+    const { uid } = await verifyAuth(req);
 
     const { text, sourceType = "text" } = req.body || {};
 
@@ -269,8 +286,18 @@ async function handleGenerate(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: "Missing text" });
     }
 
+    // Input size guard: Cap at 40,000 characters server-side before Gemini call
+    if (text.length > 40000) {
+      return res.status(400).json({
+        error: `Input text is too long (${text.length.toLocaleString()} characters). Please keep it under 40,000 characters (about 8,000 words), or split it into smaller sections.`,
+      });
+    }
+
+    const trimmedText = text.trim();
+
     if (!needsAI(sourceType)) {
-      const localResult = runLocalParser(text);
+      // Local regex parser — free, no AI, no rate limit needed
+      const localResult = runLocalParser(trimmedText);
 
       if (localResult) {
         return res.status(200).json(localResult);
@@ -283,10 +310,17 @@ async function handleGenerate(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    const aiResult = await runGemini(text);
+    // AI path — enforce per-user rate limit before hitting Gemini
+    await checkAIRateLimit(uid, "generate");
+
+    const aiResult = await runGemini(trimmedText);
     return res.status(200).json(aiResult);
 
   } catch (err: any) {
+    if (err instanceof RateLimitError) {
+      return res.status(429).json(rateLimitResponse(err));
+    }
+
     console.error("generate error", err);
 
     if (isQuotaError(err) || err?.allKeysExhausted) {

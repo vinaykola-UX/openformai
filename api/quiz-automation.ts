@@ -4,6 +4,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { verifyAuth } from "./_lib/verify-auth.js";
 import { getAdmin } from "./_lib/firebase-admin.js";
 import { geminiWithFallback, isQuotaError, GEMINI_MODEL } from "./_lib/gemini-keys.js";
+import { checkAIRateLimit, RateLimitError, rateLimitResponse } from "./_lib/rate-limit.js";
 import {
   CACHE_TTL_MS,
   makeCacheKey,
@@ -116,64 +117,84 @@ function sliceUnits(text: string, located: LocatedUnit[]): ResolvedUnit[] {
 }
 
 async function handlePlanUnits(req: VercelRequest, res: VercelResponse) {
-  await verifyAuth(req);
-  const { text, mode } = (req.body || {}) as { text?: string; mode?: "whole-subject" | "single-unit" };
-  if (!text || text.trim().length < 100) {
-    return res.status(400).json({ error: "Not enough text to plan a structure from." });
-  }
-  const resolvedMode = mode === "single-unit" ? "single-unit" : "whole-subject";
-  const clipped = text.slice(0, MAX_PLAN_CHARS);
-
-  const schema = resolvedMode === "single-unit" ? SCHEMA_SINGLE_UNIT : SCHEMA_WHOLE_SUBJECT;
-  const system = resolvedMode === "single-unit" ? SYSTEM_SINGLE_UNIT : SYSTEM_WHOLE_SUBJECT;
-
-  const response = await geminiWithFallback((ai) =>
-    ai.models.generateContent({
-      model: GEMINI_MODEL,
-      contents: [{ role: "user", parts: [{ text: clipped }] }],
-      config: { systemInstruction: system, responseMimeType: "application/json", responseSchema: schema as any },
-    })
-  );
-
-  const parsed = JSON.parse(response.text || "{}");
-
-  if (resolvedMode === "single-unit") {
-    const rawSubtopics: any[] = (parsed.subtopics || []).slice(0, MAX_SUBTOPICS_PER_UNIT);
-    const located: LocatedSubtopic[] = rawSubtopics
-      .map((s: any) => ({ subtopicTitle: s.subtopicTitle, startIndex: findMarker(clipped, s.startMarker) }))
-      .filter((s: LocatedSubtopic) => s.startIndex !== -1);
-
-    if (located.length === 0) {
-      return res.status(200).json({ subtopics: [{ subtopicTitle: "Full content", textSlice: clipped }], degraded: true });
+  try {
+    const { uid } = await verifyAuth(req);
+    const { text, mode } = (req.body || {}) as { text?: string; mode?: "whole-subject" | "single-unit" };
+    if (!text || text.trim().length < 100) {
+      return res.status(400).json({ error: "Not enough text to plan a structure from." });
     }
-    const subtopics = sliceSubtopics(clipped, located);
-    return res.status(200).json({ subtopics, degraded: false });
-  }
 
-  const rawUnits: any[] = (parsed.units || []).slice(0, MAX_UNITS);
-  const locatedUnits: LocatedUnit[] = rawUnits
-    .map((u: any) => ({ unitTitle: u.unitTitle, startIndex: findMarker(clipped, u.startMarker), rawSubtopics: u.subtopics || [] }))
-    .filter((u: LocatedUnit) => u.startIndex !== -1);
+    if (text.length > 40000) {
+      return res.status(400).json({
+        error: `Input text is too long (${text.length.toLocaleString()} characters). The maximum limit is 40,000 characters (about 8,000 words). Please shorten or split your text into chapters.`,
+      });
+    }
 
-  if (locatedUnits.length === 0) {
-    return res.status(200).json({
-      units: [{ unitTitle: "Full subject", subtopics: [{ subtopicTitle: "Full content", textSlice: clipped }] }],
-      degraded: true,
+    // Rate limit before hitting Gemini
+    await checkAIRateLimit(uid, "quiz-plan");
+
+    const resolvedMode = mode === "single-unit" ? "single-unit" : "whole-subject";
+    const clipped = text.slice(0, MAX_PLAN_CHARS);
+
+    const schema = resolvedMode === "single-unit" ? SCHEMA_SINGLE_UNIT : SCHEMA_WHOLE_SUBJECT;
+    const system = resolvedMode === "single-unit" ? SYSTEM_SINGLE_UNIT : SYSTEM_WHOLE_SUBJECT;
+
+    const response = await geminiWithFallback((ai) =>
+      ai.models.generateContent({
+        model: GEMINI_MODEL,
+        contents: [{ role: "user", parts: [{ text: clipped }] }],
+        config: { systemInstruction: system, responseMimeType: "application/json", responseSchema: schema as any },
+      })
+    );
+
+    const parsed = JSON.parse(response.text || "{}");
+
+    if (resolvedMode === "single-unit") {
+      const rawSubtopics: any[] = (parsed.subtopics || []).slice(0, MAX_SUBTOPICS_PER_UNIT);
+      const located: LocatedSubtopic[] = rawSubtopics
+        .map((s: any) => ({ subtopicTitle: s.subtopicTitle, startIndex: findMarker(clipped, s.startMarker) }))
+        .filter((s: LocatedSubtopic) => s.startIndex !== -1);
+
+      if (located.length === 0) {
+        return res.status(200).json({ subtopics: [{ subtopicTitle: "Full content", textSlice: clipped }], degraded: true });
+      }
+      const subtopics = sliceSubtopics(clipped, located);
+      return res.status(200).json({ subtopics, degraded: false });
+    }
+
+    const rawUnits: any[] = (parsed.units || []).slice(0, MAX_UNITS);
+    const locatedUnits: LocatedUnit[] = rawUnits
+      .map((u: any) => ({ unitTitle: u.unitTitle, startIndex: findMarker(clipped, u.startMarker), rawSubtopics: u.subtopics || [] }))
+      .filter((u: LocatedUnit) => u.startIndex !== -1);
+
+    if (locatedUnits.length === 0) {
+      return res.status(200).json({
+        units: [{ unitTitle: "Full subject", subtopics: [{ subtopicTitle: "Full content", textSlice: clipped }] }],
+        degraded: true,
+      });
+    }
+
+    const unitSpans = sliceUnits(clipped, locatedUnits);
+    const units = unitSpans.map(({ unitTitle, textSlice: unitText, rawSubtopics: unitRawSubtopics }) => {
+      const located: LocatedSubtopic[] = (unitRawSubtopics as any[])
+        .slice(0, MAX_SUBTOPICS_PER_UNIT)
+        .map((s: any) => ({ subtopicTitle: s.subtopicTitle, startIndex: findMarker(unitText, s.startMarker) }))
+        .filter((s: LocatedSubtopic) => s.startIndex !== -1);
+
+      const subtopics = located.length > 0 ? sliceSubtopics(unitText, located) : [{ subtopicTitle: unitTitle, textSlice: unitText }];
+      return { unitTitle, subtopics };
     });
+
+    return res.status(200).json({ units, degraded: false });
+  } catch (err: any) {
+    if (err instanceof RateLimitError) {
+      return res.status(429).json(rateLimitResponse(err));
+    }
+    if (isQuotaError(err) || err?.allKeysExhausted) {
+      return res.status(429).json({ error: "AI quota exceeded. Try again in a few minutes." });
+    }
+    return res.status(500).json({ error: err.message || "Plan units failed" });
   }
-
-  const unitSpans = sliceUnits(clipped, locatedUnits);
-  const units = unitSpans.map(({ unitTitle, textSlice: unitText, rawSubtopics: unitRawSubtopics }) => {
-    const located: LocatedSubtopic[] = (unitRawSubtopics as any[])
-      .slice(0, MAX_SUBTOPICS_PER_UNIT)
-      .map((s: any) => ({ subtopicTitle: s.subtopicTitle, startIndex: findMarker(unitText, s.startMarker) }))
-      .filter((s: LocatedSubtopic) => s.startIndex !== -1);
-
-    const subtopics = located.length > 0 ? sliceSubtopics(unitText, located) : [{ subtopicTitle: unitTitle, textSlice: unitText }];
-    return { unitTitle, subtopics };
-  });
-
-  return res.status(200).json({ units, degraded: false });
 }
 
 // ── action: "create-draft" ───────────────────────────────────────────────
@@ -247,105 +268,122 @@ async function handleCreateDraft(req: VercelRequest, res: VercelResponse) {
 // ── action: "draft-generate" ─────────────────────────────────────────────
 
 async function handleDraftGenerate(req: VercelRequest, res: VercelResponse) {
-  const { uid } = await verifyAuth(req);
-  const { draftId, unitId, subtopicId, count = 5, difficulty = "Mixed", questionType = "Mixed" } = (req.body || {}) as {
-    draftId?: string; unitId?: string; subtopicId?: string; count?: number; difficulty?: string; questionType?: string;
-  };
-  if (!draftId || !unitId || !subtopicId) {
-    return res.status(400).json({ error: "Missing draftId, unitId or subtopicId" });
-  }
-
-  const { db } = getAdmin();
-  const draftRef = db.collection("quiz_drafts").doc(draftId);
-  const draftSnap = await draftRef.get();
-  if (!draftSnap.exists) return res.status(404).json({ error: "Draft not found" });
-  if (draftSnap.data()?.uid !== uid) return res.status(403).json({ error: "Not authorized" });
-
-  const subtopicRef = draftRef.collection("units").doc(unitId).collection("subtopics").doc(subtopicId);
-  const subtopicSnap = await subtopicRef.get();
-  if (!subtopicSnap.exists) return res.status(404).json({ error: "Subtopic not found" });
-
-  const subtopicData = subtopicSnap.data()!;
-  const wasAlreadyDone = subtopicData.status === "done";
-  const text: string = subtopicData.textSlice || "";
-
-  if (text.trim().length < 40) {
-    await subtopicRef.set({ status: "error", error: "Not enough content in this subtopic to generate questions." }, { merge: true });
-    return res.status(422).json({ error: "Not enough content in this subtopic." });
-  }
-
-  await subtopicRef.set({ status: "generating" }, { merge: true });
-
-  const n = Math.max(1, Math.min(30, Number(count) || 5));
-  const cacheKey = makeCacheKey(text, n, difficulty, questionType);
-  const cacheRef = db.collection("quiz_cache").doc(cacheKey);
-  const cacheSnap = await cacheRef.get();
-
-  let questions: any[] | null = null;
-  let usedModel = "";
-  let fromCache = false;
-
-  if (cacheSnap.exists) {
-    const cached = cacheSnap.data()!;
-    const age = Date.now() - (cached.createdAt?.toMillis?.() ?? 0);
-    if (age < CACHE_TTL_MS) {
-      questions = cached.questions;
-      fromCache = true;
-    } else {
-      await cacheRef.delete();
+  try {
+    const { uid } = await verifyAuth(req);
+    const { draftId, unitId, subtopicId, count = 5, difficulty = "Mixed", questionType = "Mixed" } = (req.body || {}) as {
+      draftId?: string; unitId?: string; subtopicId?: string; count?: number; difficulty?: string; questionType?: string;
+    };
+    if (!draftId || !unitId || !subtopicId) {
+      return res.status(400).json({ error: "Missing draftId, unitId or subtopicId" });
     }
-  }
 
-  if (!questions) {
-    const prompt = buildQuestionsPrompt(text, n, difficulty, questionType, subtopicData.subtopicTitle || "");
-    const groqKey = process.env.GROQ_API_KEY;
+    const { db } = getAdmin();
+    const draftRef = db.collection("quiz_drafts").doc(draftId);
+    const draftSnap = await draftRef.get();
+    if (!draftSnap.exists) return res.status(404).json({ error: "Draft not found" });
+    if (draftSnap.data()?.uid !== uid) return res.status(403).json({ error: "Not authorized" });
 
-    try {
-      questions = await runGeminiQuestions(prompt);
-      usedModel = GEMINI_MODEL;
-    } catch (geminiErr: any) {
-      if (!(isQuotaError(geminiErr) || geminiErr?.allKeysExhausted)) {
-        console.error("[quiz-automation:draft-generate] Gemini error:", geminiErr.message);
+    const subtopicRef = draftRef.collection("units").doc(unitId).collection("subtopics").doc(subtopicId);
+    const subtopicSnap = await subtopicRef.get();
+    if (!subtopicSnap.exists) return res.status(404).json({ error: "Subtopic not found" });
+
+    const subtopicData = subtopicSnap.data()!;
+    const wasAlreadyDone = subtopicData.status === "done";
+    const text: string = subtopicData.textSlice || "";
+
+    if (text.trim().length < 40) {
+      await subtopicRef.set({ status: "error", error: "Not enough content in this subtopic to generate questions." }, { merge: true });
+      return res.status(422).json({ error: "Not enough content in this subtopic." });
+    }
+
+    if (text.length > 40000) {
+      await subtopicRef.set({ status: "error", error: `Subtopic content too long (${text.length.toLocaleString()} chars, max 40,000).` }, { merge: true });
+      return res.status(400).json({
+        error: `Subtopic text is too long (${text.length.toLocaleString()} characters). Maximum allowed is 40,000 characters.`,
+      });
+    }
+
+    await subtopicRef.set({ status: "generating" }, { merge: true });
+
+    const n = Math.max(1, Math.min(30, Number(count) || 5));
+    const cacheKey = makeCacheKey(text, n, difficulty, questionType);
+    const cacheRef = db.collection("quiz_cache").doc(cacheKey);
+    const cacheSnap = await cacheRef.get();
+
+    let questions: any[] | null = null;
+    let usedModel = "";
+    let fromCache = false;
+
+    if (cacheSnap.exists) {
+      const cached = cacheSnap.data()!;
+      const age = Date.now() - (cached.createdAt?.toMillis?.() ?? 0);
+      if (age < CACHE_TTL_MS) {
+        questions = cached.questions;
+        fromCache = true;
+      } else {
+        await cacheRef.delete();
       }
     }
 
-    if (!questions && groqKey) {
+    if (!questions) {
+      // Rate limit before hitting AI
+      await checkAIRateLimit(uid, "draft-gen");
+
+      const prompt = buildQuestionsPrompt(text, n, difficulty, questionType, subtopicData.subtopicTitle || "");
+      const groqKey = process.env.GROQ_API_KEY;
+
       try {
-        questions = await runGroqQuestions(prompt, groqKey);
-        usedModel = "groq-llama-3.3-70b";
-      } catch (groqErr: any) {
-        console.error("[quiz-automation:draft-generate] Groq error:", groqErr.message);
+        questions = await runGeminiQuestions(prompt);
+        usedModel = GEMINI_MODEL;
+      } catch (geminiErr: any) {
+        if (!(isQuotaError(geminiErr) || geminiErr?.allKeysExhausted)) {
+          console.error("[quiz-automation:draft-generate] Gemini error:", geminiErr.message);
+        }
+      }
+
+      if (!questions && groqKey) {
+        try {
+          questions = await runGroqQuestions(prompt, groqKey);
+          usedModel = "groq-llama-3.3-70b";
+        } catch (groqErr: any) {
+          console.error("[quiz-automation:draft-generate] Groq error:", groqErr.message);
+        }
+      }
+
+      if (questions && questions.length > 0) {
+        try {
+          await cacheRef.set({ questions, cacheKey, usedModel, createdAt: FieldValue.serverTimestamp() });
+        } catch (e) {
+          console.warn("[quiz-automation:draft-generate] cache write failed", e);
+        }
       }
     }
 
-    if (questions && questions.length > 0) {
-      try {
-        await cacheRef.set({ questions, cacheKey, usedModel, createdAt: FieldValue.serverTimestamp() });
-      } catch (e) {
-        console.warn("[quiz-automation:draft-generate] cache write failed", e);
-      }
+    if (!questions || questions.length === 0) {
+      await subtopicRef.set({ status: "error", error: "AI generation failed for this subtopic." }, { merge: true });
+      return res.status(429).json({ error: "AI generation failed. You can retry this subtopic." });
     }
+
+    await subtopicRef.set({ status: "done", questions, error: null }, { merge: true });
+
+    if (!wasAlreadyDone) {
+      await db.runTransaction(async (tx) => {
+        const freshDraft = await tx.get(draftRef);
+        if (!freshDraft.exists) return;
+        const data = freshDraft.data()!;
+        const doneCount = (data.doneCount || 0) + 1;
+        const isReady = doneCount >= (data.subtopicCount || 0);
+        tx.update(draftRef, { doneCount, status: isReady ? "ready" : "generating", updatedAt: FieldValue.serverTimestamp() });
+      });
+    }
+
+    return res.status(200).json({ questions, fromCache, usedModel, status: "done" });
+  } catch (err: any) {
+    if (err instanceof RateLimitError) {
+      return res.status(429).json(rateLimitResponse(err));
+    }
+    throw err;
   }
-
-  if (!questions || questions.length === 0) {
-    await subtopicRef.set({ status: "error", error: "AI generation failed for this subtopic." }, { merge: true });
-    return res.status(429).json({ error: "AI generation failed. You can retry this subtopic." });
-  }
-
-  await subtopicRef.set({ status: "done", questions, error: null }, { merge: true });
-
-  if (!wasAlreadyDone) {
-    await db.runTransaction(async (tx) => {
-      const freshDraft = await tx.get(draftRef);
-      if (!freshDraft.exists) return;
-      const data = freshDraft.data()!;
-      const doneCount = (data.doneCount || 0) + 1;
-      const isReady = doneCount >= (data.subtopicCount || 0);
-      tx.update(draftRef, { doneCount, status: isReady ? "ready" : "generating", updatedAt: FieldValue.serverTimestamp() });
-    });
-  }
-
-  return res.status(200).json({ questions, fromCache, usedModel, status: "done" });
 }
 
 // ── Router ────────────────────────────────────────────────────────────────
@@ -366,6 +404,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   } catch (err: any) {
     console.error(`[quiz-automation:${action}] error`, err);
+    if (err instanceof RateLimitError) {
+      return res.status(429).json(rateLimitResponse(err));
+    }
     if (isQuotaError(err) || err?.allKeysExhausted) {
       return res.status(429).json({ error: "AI quota exceeded. Try again in a few minutes." });
     }

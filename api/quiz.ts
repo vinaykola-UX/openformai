@@ -14,6 +14,7 @@ import {
   runGeminiQuestions,
   runGroqQuestions,
 } from "./_lib/quiz-shared.js";
+import { checkAIRateLimit, RateLimitError, rateLimitResponse } from "./_lib/rate-limit.js";
 
 export const config = { api: { bodyParser: { sizeLimit: "8mb" } } };
 
@@ -76,99 +77,135 @@ async function runGroqAnalyze(text: string, apiKey: string) {
 }
 
 async function handleAnalyze(req: VercelRequest, res: VercelResponse) {
-  await verifyAuth(req);
-  const { text } = (req.body || {}) as { text?: string };
-  if (!text || text.trim().length < 40) {
-    return res.status(400).json({ error: "Need at least 40 characters of study material to analyze." });
-  }
-  const words = text.trim().split(/\s+/).length;
-  const readingMinutes = Math.max(1, Math.round(words / 220));
-
-  let parsed: any = null;
   try {
-    parsed = await runGeminiAnalyze(text);
-  } catch (geminiErr: any) {
-    if (!(isQuotaError(geminiErr) || geminiErr?.allKeysExhausted)) {
-      console.error("[quiz:analyze] Gemini error:", geminiErr.message);
+    const { uid } = await verifyAuth(req);
+    const { text } = (req.body || {}) as { text?: string };
+    if (!text || text.trim().length < 40) {
+      return res.status(400).json({ error: "Need at least 40 characters of study material to analyze." });
     }
-  }
-  if (!parsed) {
-    const groqKey = process.env.GROQ_API_KEY;
-    if (groqKey) {
-      try {
-        parsed = await runGroqAnalyze(text, groqKey);
-      } catch (groqErr: any) {
-        console.error("[quiz:analyze] Groq error:", groqErr.message);
+
+    if (text.length > 40000) {
+      return res.status(400).json({
+        error: `Study material is too long (${text.length.toLocaleString()} characters). The maximum limit is 40,000 characters (about 8,000 words). Please shorten or split your text into sections.`,
+      });
+    }
+
+    // Rate limit: analyze is a Gemini call
+    await checkAIRateLimit(uid, "quiz-analyze");
+
+    const words = text.trim().split(/\s+/).length;
+    const readingMinutes = Math.max(1, Math.round(words / 220));
+
+    let parsed: any = null;
+    try {
+      parsed = await runGeminiAnalyze(text);
+    } catch (geminiErr: any) {
+      if (!(isQuotaError(geminiErr) || geminiErr?.allKeysExhausted)) {
+        console.error("[quiz:analyze] Gemini error:", geminiErr.message);
       }
     }
+    if (!parsed) {
+      const groqKey = process.env.GROQ_API_KEY;
+      if (groqKey) {
+        try {
+          parsed = await runGroqAnalyze(text, groqKey);
+        } catch (groqErr: any) {
+          console.error("[quiz:analyze] Groq error:", groqErr.message);
+        }
+      }
+    }
+    if (!parsed) {
+      return res.status(429).json({ error: "All AI services are temporarily unavailable. Please try again in a few minutes." });
+    }
+    return res.status(200).json({ ...parsed, wordCount: words, readingMinutes });
+  } catch (err: any) {
+    if (err instanceof RateLimitError) {
+      return res.status(429).json(rateLimitResponse(err));
+    }
+    throw err;
   }
-  if (!parsed) {
-    return res.status(429).json({ error: "All AI services are temporarily unavailable. Please try again in a few minutes." });
-  }
-  return res.status(200).json({ ...parsed, wordCount: words, readingMinutes });
 }
 
 // ── action: "generate" ───────────────────────────────────────────────────
 
 async function handleGenerate(req: VercelRequest, res: VercelResponse) {
-  await verifyAuth(req);
-  const { text, count = 5, difficulty = "Mixed", questionType = "Mixed" } = (req.body || {}) as {
-    text?: string; count?: number; difficulty?: string; questionType?: string;
-  };
-  if (!text || text.trim().length < 40) {
-    return res.status(400).json({ error: "Need study material to generate a quiz." });
-  }
-
-  const n = Math.max(1, Math.min(100, Number(count) || 5));
-  const groqKey = process.env.GROQ_API_KEY;
-  const { db } = getAdmin();
-
-  const cacheKey = makeCacheKey(text, n, difficulty, questionType);
-  const cacheRef = db.collection("quiz_cache").doc(cacheKey);
-  const cacheSnap = await cacheRef.get();
-
-  if (cacheSnap.exists) {
-    const cached = cacheSnap.data()!;
-    const age = Date.now() - (cached.createdAt?.toMillis?.() ?? 0);
-    if (age < CACHE_TTL_MS) {
-      return res.status(200).json({ questions: cached.questions, fromCache: true });
-    }
-    await cacheRef.delete();
-  }
-
-  const prompt = buildQuestionsPrompt(text, n, difficulty, questionType);
-  let questions: any[] | null = null;
-  let usedModel = "";
-
   try {
-    questions = await runGeminiQuestions(prompt);
-    usedModel = GEMINI_MODEL;
-  } catch (geminiErr: any) {
-    if (!(isQuotaError(geminiErr) || geminiErr?.allKeysExhausted)) {
-      console.error("[quiz:generate] Gemini error:", geminiErr.message);
+    const { uid } = await verifyAuth(req);
+    const { text, count = 5, difficulty = "Mixed", questionType = "Mixed" } = (req.body || {}) as {
+      text?: string; count?: number; difficulty?: string; questionType?: string;
+    };
+    if (!text || text.trim().length < 40) {
+      return res.status(400).json({ error: "Need study material to generate a quiz." });
     }
-  }
 
-  if (!questions && groqKey) {
+    if (text.length > 40000) {
+      return res.status(400).json({
+        error: `Study material is too long (${text.length.toLocaleString()} characters). The maximum limit is 40,000 characters (about 8,000 words). Please shorten or split your text into sections.`,
+      });
+    }
+
+    // Rate limit before hitting any AI
+    await checkAIRateLimit(uid, "quiz-generate");
+
+    const n = Math.max(1, Math.min(100, Number(count) || 5));
+    const groqKey = process.env.GROQ_API_KEY;
+    const { db } = getAdmin();
+
+    const cacheKey = makeCacheKey(text, n, difficulty, questionType);
+    const cacheRef = db.collection("quiz_cache").doc(cacheKey);
+    const cacheSnap = await cacheRef.get();
+
+    if (cacheSnap.exists) {
+      const cached = cacheSnap.data()!;
+      const age = Date.now() - (cached.createdAt?.toMillis?.() ?? 0);
+      if (age < CACHE_TTL_MS) {
+        return res.status(200).json({ questions: cached.questions, fromCache: true });
+      }
+      await cacheRef.delete();
+    }
+
+    const prompt = buildQuestionsPrompt(text, n, difficulty, questionType);
+    let questions: any[] | null = null;
+    let usedModel = "";
+
     try {
-      questions = await runGroqQuestions(prompt, groqKey);
-      usedModel = "groq-llama-3.3-70b";
-    } catch (groqErr: any) {
-      console.error("[quiz:generate] Groq error:", groqErr.message);
+      questions = await runGeminiQuestions(prompt);
+      usedModel = GEMINI_MODEL;
+    } catch (geminiErr: any) {
+      if (!(isQuotaError(geminiErr) || geminiErr?.allKeysExhausted)) {
+        console.error("[quiz:generate] Gemini error:", geminiErr.message);
+      }
     }
-  }
 
-  if (!questions || questions.length === 0) {
-    return res.status(429).json({ error: "All AI services are temporarily unavailable. Please try again in a few minutes." });
-  }
+    if (!questions && groqKey) {
+      try {
+        questions = await runGroqQuestions(prompt, groqKey);
+        usedModel = "groq-llama-3.3-70b";
+      } catch (groqErr: any) {
+        console.error("[quiz:generate] Groq error:", groqErr.message);
+      }
+    }
 
-  try {
-    await cacheRef.set({ questions, cacheKey, usedModel, createdAt: FieldValue.serverTimestamp() });
-  } catch (cacheErr) {
-    console.warn("[quiz:generate] cache write failed:", cacheErr);
-  }
+    if (!questions || questions.length === 0) {
+      return res.status(429).json({ error: "All AI services are temporarily unavailable. Please try again in a few minutes." });
+    }
 
-  return res.status(200).json({ questions, fromCache: false, usedModel });
+    try {
+      await cacheRef.set({ questions, cacheKey, usedModel, createdAt: FieldValue.serverTimestamp() });
+    } catch (cacheErr) {
+      console.warn("[quiz:generate] cache write failed:", cacheErr);
+    }
+
+    return res.status(200).json({ questions, fromCache: false, usedModel });
+  } catch (err: any) {
+    if (err instanceof RateLimitError) {
+      return res.status(429).json(rateLimitResponse(err));
+    }
+    if (isQuotaError(err) || err?.allKeysExhausted) {
+      return res.status(429).json({ error: "AI quota exceeded. Try again in a few minutes." });
+    }
+    return res.status(500).json({ error: err.message || "Quiz generation failed" });
+  }
 }
 
 // ── action: "create-form" ────────────────────────────────────────────────
@@ -349,11 +386,21 @@ function parseOutlines(raw: string): Array<{ title: string; angle: string; topic
 }
 
 async function handleSuggestOutlines(req: VercelRequest, res: VercelResponse) {
-  await verifyAuth(req);
-  const { command } = (req.body || {}) as { command?: string };
-  if (!command || !command.trim()) {
-    return res.status(400).json({ error: "Missing command" });
-  }
+  try {
+    const { uid } = await verifyAuth(req);
+    const { command } = (req.body || {}) as { command?: string };
+    if (!command || !command.trim()) {
+      return res.status(400).json({ error: "Missing command" });
+    }
+
+    if (command.length > 5000) {
+      return res.status(400).json({
+        error: `Topic description is too long (${command.length.toLocaleString()} characters). Please keep it under 5,000 characters.`,
+      });
+    }
+
+    // Rate limit: uses Google Search grounding — especially important to guard
+    await checkAIRateLimit(uid, "quiz-outlines");
 
   const prompt = `You are a research assistant helping design a quiz or form. The user's request:
 "${command.trim()}"
@@ -388,16 +435,25 @@ CONTENT:
     })
   );
 
-  const raw = response.text || "";
-  const outlines = parseOutlines(raw);
+    const raw = response.text || "";
+    const outlines = parseOutlines(raw);
 
-  if (outlines.length === 0) {
-    return res.status(502).json({
-      error: "Couldn't organize the research into options — try rephrasing your request, or be more specific about the topic.",
-    });
+    if (outlines.length === 0) {
+      return res.status(502).json({
+        error: "Couldn't organize the research into options — try rephrasing your request, or be more specific about the topic.",
+      });
+    }
+
+    return res.status(200).json({ outlines });
+  } catch (err: any) {
+    if (err instanceof RateLimitError) {
+      return res.status(429).json(rateLimitResponse(err));
+    }
+    if (isQuotaError(err) || err?.allKeysExhausted) {
+      return res.status(429).json({ error: "AI quota exceeded. Try again in a few minutes." });
+    }
+    return res.status(500).json({ error: err.message || "Outline suggestion failed" });
   }
-
-  return res.status(200).json({ outlines });
 }
 
 // ── Router ────────────────────────────────────────────────────────────────
@@ -420,6 +476,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   } catch (err: any) {
     console.error(`[quiz:${action}] error`, err);
+    if (err instanceof RateLimitError) {
+      return res.status(429).json(rateLimitResponse(err));
+    }
     if (isQuotaError(err) || err?.allKeysExhausted) {
       return res.status(429).json({ error: "AI quota exceeded. Try again in a few minutes." });
     }
