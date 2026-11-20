@@ -589,6 +589,7 @@ async function handleFormReport(req: VercelRequest, res: VercelResponse) {
       title?: string;
       correctAnswers?: string[];
       points?: number;
+      level?: number;
     }> = Array.isArray(storedForm.questions) ? storedForm.questions : [];
 
     const userSnap = await db.collection("users").doc(uid).get();
@@ -615,6 +616,7 @@ async function handleFormReport(req: VercelRequest, res: VercelResponse) {
       correctAnswers: string[];
       points: number;
       isGraded: boolean;
+      level: number | null;
     }> = {};
 
     items.forEach((item: any, idx: number) => {
@@ -625,12 +627,14 @@ async function handleFormReport(req: VercelRequest, res: VercelResponse) {
       const correctAnswers = (stored?.correctAnswers || [])
         .map((a: any) => String(a).toLowerCase().trim())
         .filter(Boolean);
+      const lv = Number(stored?.level);
       questionMap[qId] = {
         title: item.title || stored?.title || `Q${idx + 1}`,
         index: idx,
         correctAnswers,
         points: stored?.points ?? 1,
         isGraded: correctAnswers.length > 0,
+        level: Number.isInteger(lv) && lv >= 1 && lv <= 6 ? lv : null,
       };
     });
 
@@ -709,6 +713,34 @@ async function handleFormReport(req: VercelRequest, res: VercelResponse) {
       byBranch[key].push(s);
     });
 
+    // Bloom level-wise performance (only exists for forms created with levels)
+    const BLOOM_NAMES = ["", "Remember", "Understand", "Apply", "Analyze", "Evaluate", "Create"];
+    const levelAgg: Record<number, { questions: number; correct: number; total: number }> = {};
+    Object.entries(questionMap).forEach(([qId, qInfo]) => {
+      if (!qInfo.isGraded || !qInfo.level) return;
+      if (!levelAgg[qInfo.level]) levelAgg[qInfo.level] = { questions: 0, correct: 0, total: 0 };
+      const agg = levelAgg[qInfo.level];
+      agg.questions += 1;
+      allResponses.forEach((r: any) => {
+        agg.total += 1;
+        const given = (r.answers?.[qId]?.textAnswers?.answers || []).map((a: any) =>
+          String(a.value).toLowerCase().trim()
+        );
+        if (qInfo.correctAnswers.some((ca) => given.includes(ca))) agg.correct += 1;
+      });
+    });
+    const levelStats = Object.keys(levelAgg)
+      .map(Number)
+      .sort((a, b) => a - b)
+      .map((level) => ({
+        level,
+        name: BLOOM_NAMES[level],
+        questions: levelAgg[level].questions,
+        percentage: levelAgg[level].total
+          ? Math.round((levelAgg[level].correct / levelAgg[level].total) * 100)
+          : 0,
+      }));
+
     const totalStudents = studentResults.length;
     const avgScore = totalStudents > 0
       ? Math.round(studentResults.reduce((s, r) => s + r.percentage, 0) / totalStudents)
@@ -779,13 +811,13 @@ async function handleFormReport(req: VercelRequest, res: VercelResponse) {
       byBranch,
       branches: Object.keys(byBranch).sort(),
       tracker,
+      levelStats,
     });
   } catch (err: any) {
     console.error("form-report error", err);
     return res.status(500).json({ error: err.message || "Report failed" });
   }
 }
-
 // ─────────────────────────────────────────────────────────────────────────
 // action: "overall-review"
 // Aggregates graded results across ALL of the user's quiz forms, matching
