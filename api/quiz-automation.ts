@@ -4,6 +4,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { verifyAuth } from "./_lib/verify-auth.js";
 import { getAdmin } from "./_lib/firebase-admin.js";
 import { geminiWithFallback, isQuotaError, GEMINI_MODEL } from "./_lib/gemini-keys.js";
+import { getAllGroqKeys, groqWithFallback } from "./_lib/groq-keys.js";
 import { checkAIRateLimit, RateLimitError, rateLimitResponse } from "./_lib/rate-limit.js";
 import {
   CACHE_TTL_MS,
@@ -330,7 +331,7 @@ async function handleDraftGenerate(req: VercelRequest, res: VercelResponse) {
       await checkAIRateLimit(uid, "draft-gen");
 
       const prompt = buildQuestionsPrompt(text, n, difficulty, questionType, subtopicData.subtopicTitle || "");
-      const groqKey = process.env.GROQ_API_KEY;
+      const hasGroqKeys = getAllGroqKeys().length > 0;
 
       try {
         questions = await runGeminiQuestions(prompt);
@@ -341,9 +342,9 @@ async function handleDraftGenerate(req: VercelRequest, res: VercelResponse) {
         }
       }
 
-      if (!questions && groqKey) {
+      if (!questions && hasGroqKeys) {
         try {
-          questions = await runGroqQuestions(prompt, groqKey);
+          questions = await groqWithFallback((apiKey) => runGroqQuestions(prompt, apiKey));
           usedModel = "groq-llama-3.3-70b";
         } catch (groqErr: any) {
           console.error("[quiz-automation:draft-generate] Groq error:", groqErr.message);

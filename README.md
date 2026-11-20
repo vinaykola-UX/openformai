@@ -29,7 +29,13 @@ Turn pasted exam questions into real Google Forms using AI.
 1. Visit [aistudio.google.com/apikey](https://aistudio.google.com/apikey) → create API key.
 2. Set `GEMINI_API_KEY`.
 
-## 3. Google Cloud OAuth (for Forms API)
+## 3. Optional Groq fallback
+
+1. Create up to three Groq API keys.
+2. Set `GROQ_API_KEY`, `GROQ_API_KEY_2`, and `GROQ_API_KEY_3` in your deployment environment. The first is the existing key; the other two are optional.
+3. When Gemini is unavailable during quiz analysis or question generation, OpenForm rotates through the configured Groq keys and retries on key, quota, and transient server/network errors.
+
+## 4. Google Cloud OAuth (for Forms API)
 
 1. Go to [console.cloud.google.com](https://console.cloud.google.com) → select / create a project.
 2. **APIs & Services → Library**: enable **Google Forms API** and **Google Drive API**.
@@ -39,7 +45,7 @@ Turn pasted exam questions into real Google Forms using AI.
    - For local dev also add: `http://localhost:8080/google/callback`
 5. Copy Client ID & Secret into env. Set `GOOGLE_REDIRECT_URI` to the matching URI.
 
-## 4. Local dev
+## 5. Local dev
 
 ```bash
 npm install
@@ -53,7 +59,7 @@ npm i -g vercel
 vercel dev
 ```
 
-## 5. Deploy to Vercel
+## 6. Deploy to Vercel
 
 1. Push repo to GitHub.
 2. [vercel.com/new](https://vercel.com/new) → import repo.

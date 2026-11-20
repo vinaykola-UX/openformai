@@ -7,6 +7,7 @@ import { getAdmin } from "./_lib/firebase-admin.js";
 import { resolveExpectedStudents, ROLL_FIELD_REGEX } from "./_lib/rosters.js";
 import { oauthClient } from "./_lib/google-oauth.js";
 import { geminiWithFallback, isQuotaError, GEMINI_MODEL } from "./_lib/gemini-keys.js";
+import { getAllGroqKeys, groqWithFallback, GroqApiError } from "./_lib/groq-keys.js";
 import {
   CACHE_TTL_MS,
   makeCacheKey,
@@ -74,7 +75,7 @@ async function runGroqAnalyze(text: string, apiKey: string) {
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err?.error?.message || `Groq error ${res.status}`);
+    throw new GroqApiError(res.status, err?.error?.message || "Request failed");
   }
   const data = await res.json();
   return JSON.parse(data.choices?.[0]?.message?.content || "{}");
@@ -109,10 +110,9 @@ async function handleAnalyze(req: VercelRequest, res: VercelResponse) {
       }
     }
     if (!parsed) {
-      const groqKey = process.env.GROQ_API_KEY;
-      if (groqKey) {
+      if (getAllGroqKeys().length > 0) {
         try {
-          parsed = await runGroqAnalyze(text, groqKey);
+          parsed = await groqWithFallback((apiKey) => runGroqAnalyze(text, apiKey));
         } catch (groqErr: any) {
           console.error("[quiz:analyze] Groq error:", groqErr.message);
         }
@@ -160,7 +160,7 @@ async function handleGenerate(req: VercelRequest, res: VercelResponse) {
     await checkAIRateLimit(uid, "quiz-generate");
 
     const n = bloom ? bloom.total : Math.max(1, Math.min(100, Number(count) || 5));
-    const groqKey = process.env.GROQ_API_KEY;
+    const hasGroqKeys = getAllGroqKeys().length > 0;
     const { db } = getAdmin();
 
     const cacheKey = makeCacheKey(text, n, difficulty, questionType, bloom?.counts);
@@ -190,9 +190,9 @@ async function handleGenerate(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    if (!questions && groqKey) {
+    if (!questions && hasGroqKeys) {
       try {
-        questions = await runGroqQuestions(prompt, groqKey, aiOpts);
+        questions = await groqWithFallback((apiKey) => runGroqQuestions(prompt, apiKey, aiOpts));
         usedModel = "groq-llama-3.3-70b";
       } catch (groqErr: any) {
         console.error("[quiz:generate] Groq error:", groqErr.message);

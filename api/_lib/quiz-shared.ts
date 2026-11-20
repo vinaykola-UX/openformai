@@ -1,6 +1,7 @@
 import { Type } from "@google/genai";
 import { createHash } from "crypto";
 import { geminiWithFallback, GEMINI_MODEL } from "./gemini-keys.js";
+import { GroqApiError } from "./groq-keys.js";
 
 export const QUESTIONS_SCHEMA = {
   type: Type.OBJECT,
@@ -300,7 +301,7 @@ export async function runGroqQuestions(
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err?.error?.message || `Groq error ${res.status}`);
+    throw new GroqApiError(res.status, err?.error?.message || "Request failed");
   }
   const data = await res.json();
   const content = data.choices?.[0]?.message?.content || "{}";
