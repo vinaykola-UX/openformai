@@ -31,8 +31,8 @@ Turn pasted exam questions into real Google Forms using AI.
 
 ## 3. Optional Groq fallback
 
-1. Create up to three Groq API keys.
-2. Set `GROQ_API_KEY`, `GROQ_API_KEY_2`, and `GROQ_API_KEY_3` in your deployment environment. The first is the existing key; the other two are optional.
+1. Create up to four Groq API keys.
+2. Set `GROQ_API_KEY`, `GROQ_API_KEY_2`, `GROQ_API_KEY_3`, and `GROQ_API_KEY_4` in your deployment environment. The first is the existing key; the other three are optional.
 3. When Gemini is unavailable during quiz analysis or question generation, OpenForm rotates through the configured Groq keys and retries on key, quota, and transient server/network errors.
 
 ## 4. Google Cloud OAuth (for Forms API)

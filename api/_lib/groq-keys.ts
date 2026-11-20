@@ -16,7 +16,12 @@ let inMemoryCounter = 0;
 export function getAllGroqKeys(): string[] {
   return Array.from(
     new Set(
-      [process.env.GROQ_API_KEY, process.env.GROQ_API_KEY_2, process.env.GROQ_API_KEY_3]
+      [
+        process.env.GROQ_API_KEY,
+        process.env.GROQ_API_KEY_2,
+        process.env.GROQ_API_KEY_3,
+        process.env.GROQ_API_KEY_4,
+      ]
         .filter((key): key is string => typeof key === "string")
         .map((key) => key.trim())
         .filter(Boolean)
