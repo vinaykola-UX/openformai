@@ -44,6 +44,7 @@ type ReportData = {
   byBranch: Record<string, StudentResult[]>;
   branches: string[];
   tracker?: ResponseTracker;
+  levelStats?: { level: number; name: string; questions: number; percentage: number }[];
 };
 
 async function getAuthHeader() {
@@ -74,7 +75,6 @@ function startOfDay(d: Date) {
 function endOfDay(d: Date) {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999).getTime();
 }
-
 /** Returns [startMs, endMs] (inclusive) for the given mode, or null for "all". */
 function dateRangeFor(
   mode: DateMode,
@@ -215,8 +215,7 @@ export default function FormReport() {
       setLoading(false);
     }
   }
-
-  // ── Export Excel ──────────────────────────────────────────────────────────
+// ── Export Excel ──────────────────────────────────────────────────────────
   async function exportExcel() {
     if (!report) return;
     setExporting("excel");
@@ -431,6 +430,28 @@ XLSX.utils.book_append_sheet(wb, wsAll, "All Students");
                 </div>
               </div>
 
+              {/* Bloom level-wise performance (shows only for Bloom quizzes) */}
+              {report.levelStats && report.levelStats.length > 0 && (
+                <div className="card p-4">
+                  <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink/50">
+                    Level-wise performance (Bloom's Taxonomy)
+                  </p>
+                  <div className="space-y-2">
+                    {report.levelStats.map((l) => (
+                      <div key={l.level}>
+                        <div className="mb-1 flex justify-between text-xs font-semibold">
+                          <span>BL{l.level} · {l.name} <span className="text-ink/40">({l.questions} Q)</span></span>
+                          <span className={gradeColor(l.percentage)}>{l.percentage}%</span>
+                        </div>
+                        <div className="h-2 w-full overflow-hidden rounded-full bg-peach/40">
+                          <div className="h-full rounded-full bg-brand transition-all" style={{ width: `${l.percentage}%` }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* ── Response Tracker (Who Filled vs Not Responded) ── */}
               <section className="space-y-4">
                 {trackerLoading && (
@@ -593,7 +614,6 @@ XLSX.utils.book_append_sheet(wb, wsAll, "All Students");
                   </div>
                 )}
               </section>
-
               {/* Date filter */}
               <div className="no-print card p-4">
                 <div className="mb-3 flex items-center gap-2 text-sm font-bold">
