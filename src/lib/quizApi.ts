@@ -49,7 +49,9 @@ export type QuizQuestion = {
   points?: number;
   difficulty?: "Easy" | "Medium" | "Hard";
   required?: boolean;
-  level?: number; // Bloom level 1–6 (optional, only on Bloom quizzes)
+  level?: number; // Bloom level 1-6 (optional, only on Bloom quizzes)
+  math?: string; // LaTeX shown as a picture under the question text (optional)
+  optionMath?: (string | null)[]; // LaTeX per option; non-null = that option is a picture (optional)
 };
 
 export const analyzeMaterial = (text: string) =>
@@ -66,6 +68,7 @@ export const generateQuiz = (opts: {
   difficulty: string;
   questionType: string;
   levelCounts?: Record<string, number>; // e.g. { "1": 3, "2": 3, "3": 2 }
+  mathCount?: number; // 0-10 maths questions (matrices / stacked expressions); omit for none
 }) => call<{ questions: QuizQuestion[] }>("/api/quiz", "generate", opts);
 
 export const createQuizForm = (opts: {
