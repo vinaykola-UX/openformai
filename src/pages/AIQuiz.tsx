@@ -1,9 +1,9 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   ArrowLeft, Upload, Link2, Loader2, Sparkles, Wand2, Brain,
   CheckCircle2, ExternalLink, BookOpen, Target, Plus, Minus, Trash2,
-  Copy, ChevronDown, Download, Globe,
+  Copy, ChevronDown, Download, Globe, Sigma,
 } from "lucide-react";
 import AppShell from "../components/AppShell";
 import StudentImport from "../components/StudentImport";
@@ -11,6 +11,9 @@ import ErrorCard from "../components/ErrorCard";
 import CopyLinkButton from "../components/CopyLinkButton";
 import UnlockDialog from "../components/UnlockDialog";
 import { extractFileText, extractDriveUrl } from "../lib/api";
+import {
+  mathImageUrl, TEXT_SYMBOLS, LATEX_STRUCTURES, matrixLatex, insertAtCursor,
+} from "../lib/mathImage";
 import {
   analyzeMaterial, generateQuiz, createQuizForm, suggestOutlines,
   type QuizAnalysis, type QuizQuestion, type QuizOutline,
@@ -28,7 +31,9 @@ const QTYPES = [
   { v: "SHORT", label: "Short Answer" },
   { v: "PARAGRAPH", label: "Paragraph" },
 ];
+
 const MAX_BLOOM_TOTAL = 30;
+const MAX_MATH_QUESTIONS = 10;
 const BLOOM_LEVELS = [
   { level: 1, name: "Remember" },
   { level: 2, name: "Understand" },
@@ -70,7 +75,11 @@ export default function AIQuiz() {
   const [expectedStudents, setExpectedStudents] = useState<string[]>([]);
   const [bloomOn, setBloomOn] = useState(false);
   const [levelCounts, setLevelCounts] = useState<Record<number, number>>({ 1: 3, 2: 3, 3: 2, 4: 2, 5: 0, 6: 0 });
-  const bloomTotal = Object.values(levelCounts).reduce((a, b) => a + b, 0);
+  const bloomTotal = [1, 2, 3, 4, 5, 6].reduce((sum, l) => sum + (levelCounts[l] || 0), 0);
+  const [mathCount, setMathCount] = useState(0);
+  const normalTotal = customCount ? Math.max(1, Math.min(100, Number(customCount) || 10)) : count;
+  const mathMax = Math.min(MAX_MATH_QUESTIONS, bloomOn ? bloomTotal : normalTotal);
+  const mathSend = Math.min(mathCount, mathMax);
 
   function changeLevel(level: number, delta: number) {
     setLevelCounts((prev) => {
@@ -157,15 +166,19 @@ export default function AIQuiz() {
     setError(""); setGenerating(true);
     try {
       const n = customCount ? Math.max(1, Math.min(100, Number(customCount) || 10)) : count;
+      const mathExtra = mathSend > 0 ? { mathCount: mathSend } : {};
+      const levelPayload: Record<string, number> = {};
+      BLOOM_LEVELS.forEach((b) => { levelPayload[String(b.level)] = levelCounts[b.level] || 0; });
       const { questions: qs } = bloomOn
         ? await generateQuiz({
             text,
             count: bloomTotal,
             difficulty: "Mixed",
             questionType: "MCQ",
-            levelCounts: Object.fromEntries(Object.entries(levelCounts).map(([k, v]) => [k, v])),
+            levelCounts: levelPayload,
+            ...mathExtra,
           })
-        : await generateQuiz({ text, count: n, difficulty, questionType: qType });
+        : await generateQuiz({ text, count: n, difficulty, questionType: qType, ...mathExtra });
       const defaults: QuizQuestion[] = [
         { type: "SHORT", title: "Email ID", required: true, points: 0 },
         { type: "SHORT", title: "Full Name", required: true, points: 0 },
@@ -289,7 +302,7 @@ export default function AIQuiz() {
       doc.save(`${safe}.pdf`);
     }
   }
-  // ─── Result screen ─────────────────────────────────────────────
+// ─── Result screen ─────────────────────────────────────────────
   if (step === "result" && result) {
     return (
       <AppShell>
@@ -351,8 +364,7 @@ export default function AIQuiz() {
             <ErrorCard error={error} onDismiss={() => setError("")} />
           </div>
         )}
-
-        {step === "input" && (
+{step === "input" && (
           <>
             <div className="card p-6 sm:p-8">
               <h2 className="font-display text-lg font-bold flex items-center gap-2">
@@ -517,6 +529,26 @@ export default function AIQuiz() {
                       </>
                     )}
 
+                    <div>
+                      <label className="label">Maths questions (matrices &amp; symbols)</label>
+                      <div className="flex flex-wrap items-center gap-3">
+                        <button type="button" onClick={() => setMathCount(Math.max(0, mathSend - 1))}
+                          disabled={mathSend <= 0}
+                          className="grid h-7 w-7 place-items-center rounded-full bg-peach/40 text-brand-700 disabled:opacity-30">
+                          <Minus className="h-3.5 w-3.5" />
+                        </button>
+                        <span className="w-6 text-center text-sm font-bold">{mathSend}</span>
+                        <button type="button" onClick={() => setMathCount(Math.min(mathMax, mathSend + 1))}
+                          disabled={mathSend >= mathMax}
+                          className="grid h-7 w-7 place-items-center rounded-full bg-peach/40 text-brand-700 disabled:opacity-30">
+                          <Plus className="h-3.5 w-3.5" />
+                        </button>
+                        <span className="text-xs text-ink/60 dark:text-[#F5EDE7]/60">
+                          0 = none · max {MAX_MATH_QUESTIONS} · shown as pictures in the form
+                        </span>
+                      </div>
+                    </div>
+
                     <PillGroup label="Form mode" value={mode}
                       options={[{ v: "quiz", label: "Google Quiz (graded)" }, { v: "form", label: "Normal Google Form" }]}
                       onChange={(v) => setMode(v as "quiz" | "form")} />
@@ -531,7 +563,6 @@ export default function AIQuiz() {
             )}
           </>
         )}
-
         {step === "review" && questions && (
           <>
             <div className="card p-6 sm:p-8">
@@ -694,6 +725,72 @@ function ExportMenu({ onExport }: { onExport: (f: "json" | "txt" | "md" | "csv" 
   );
 }
 
+function useDebounced<T>(value: T, ms: number): T {
+  const [v, setV] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setV(value), ms);
+    return () => clearTimeout(t);
+  }, [value, ms]);
+  return v;
+}
+
+function MathPreview({ latex }: { latex: string }) {
+  const debounced = useDebounced(latex.trim(), 700);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => { setFailed(false); }, [debounced]);
+  if (!debounced) return null;
+  if (failed) return <p className="mt-1 text-xs text-red-500">Preview failed. Check the LaTeX.</p>;
+  return (
+    <div className="mt-2 overflow-x-auto rounded-xl border border-brand/10 bg-white p-2">
+      <img src={mathImageUrl(debounced)} alt="Maths preview" className="max-h-48 max-w-full"
+        onError={() => setFailed(true)} />
+    </div>
+  );
+}
+
+function MathPalette({ onText, onLatex }: { onText: (t: string) => void; onLatex: (l: string) => void }) {
+  const [rows, setRows] = useState(2);
+  const [cols, setCols] = useState(2);
+  const keep = (e: React.MouseEvent) => e.preventDefault(); // keep the cursor in the field
+  const chip = "rounded-lg bg-white px-2 py-1 text-xs font-semibold text-brand-700 shadow-sm hover:bg-peach/40 dark:bg-[#241218]";
+  return (
+    <div className="mt-2 rounded-2xl border border-brand/15 bg-cream/60 p-3 dark:border-white/10 dark:bg-white/5">
+      <p className="text-xs font-semibold text-ink/50">Symbols (typed into the field you tapped last)</p>
+      <div className="mt-1 flex flex-wrap gap-1">
+        {TEXT_SYMBOLS.map((sym) => (
+          <button key={sym} type="button" onMouseDown={keep} onClick={() => onText(sym)} className={chip}>{sym}</button>
+        ))}
+      </div>
+
+      <p className="mt-3 text-xs font-semibold text-ink/50">Matrices &amp; expressions (shown as a picture)</p>
+      <div className="mt-1 flex flex-wrap gap-1">
+        {[[2, 2], [3, 3], [2, 3], [3, 2], [4, 4]].map(([r, c]) => (
+          <button key={`${r}x${c}`} type="button" onMouseDown={keep}
+            onClick={() => onLatex(matrixLatex(r, c, "bmatrix"))} className={chip}>
+            [ ] {r}×{c}
+          </button>
+        ))}
+        <button type="button" onMouseDown={keep} onClick={() => onLatex(matrixLatex(2, 2, "vmatrix"))} className={chip}>| | 2×2</button>
+        <button type="button" onMouseDown={keep} onClick={() => onLatex(matrixLatex(3, 3, "vmatrix"))} className={chip}>| | 3×3</button>
+        {LATEX_STRUCTURES.map((st) => (
+          <button key={st.label} type="button" onMouseDown={keep} onClick={() => onLatex(st.latex)} className={chip}>{st.label}</button>
+        ))}
+      </div>
+
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-ink/60 dark:text-[#F5EDE7]/60">
+        Custom size
+        <input type="number" min={1} max={6} value={rows} onChange={(e) => setRows(Number(e.target.value) || 1)}
+          className="w-12 rounded-lg border border-brand/10 bg-white px-2 py-0.5 outline-none dark:bg-[#241218]" />
+        ×
+        <input type="number" min={1} max={6} value={cols} onChange={(e) => setCols(Number(e.target.value) || 1)}
+          className="w-12 rounded-lg border border-brand/10 bg-white px-2 py-0.5 outline-none dark:bg-[#241218]" />
+        <button type="button" onMouseDown={keep} onClick={() => onLatex(matrixLatex(rows, cols, "bmatrix"))} className={chip}>Matrix</button>
+        <button type="button" onMouseDown={keep} onClick={() => onLatex(matrixLatex(rows, cols, "vmatrix"))} className={chip}>Determinant</button>
+      </div>
+    </div>
+  );
+}
+
 function QuizCard({
   q, index, total, onChange, onDelete, onDuplicate, onMoveUp, onMoveDown,
 }: {
@@ -705,6 +802,11 @@ function QuizCard({
   const hasOptions = q.type === "MCQ" || q.type === "CHECKBOX" || q.type === "TRUE_FALSE";
   const opts = q.type === "TRUE_FALSE" ? ["True", "False"] : (q.options || []);
   const isMulti = q.type === "CHECKBOX";
+  const canOptionMath = q.type === "MCQ" || q.type === "CHECKBOX";
+
+  const lastFocus = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const track = (e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => { lastFocus.current = e.currentTarget; };
 
   function toggleCorrect(opt: string) {
     const current = new Set(q.correctAnswers || []);
@@ -717,6 +819,32 @@ function QuizCard({
     onChange({ ...q, correctAnswers: Array.from(current) });
   }
 
+  function insertText(t: string) {
+    const el = lastFocus.current;
+    if (el && document.body.contains(el)) insertAtCursor(el, t);
+    else onChange({ ...q, title: q.title + t });
+  }
+
+  function insertLatex(l: string) {
+    const el = lastFocus.current;
+    if (el && el.dataset.math === "1" && document.body.contains(el)) { insertAtCursor(el, l); return; }
+    onChange({ ...q, math: q.math ? `${q.math} ${l}` : l });
+  }
+
+  function toggleOptionMath(i: number) {
+    const om: (string | null)[] = [...(q.optionMath || [])];
+    while (om.length < (q.options?.length ?? 0)) om.push(null);
+    om[i] = om[i] == null ? "" : null;
+    onChange({ ...q, optionMath: om.some((v) => v != null) ? om : undefined });
+  }
+
+  function setOptionMath(i: number, value: string) {
+    const om: (string | null)[] = [...(q.optionMath || [])];
+    while (om.length < (q.options?.length ?? 0)) om.push(null);
+    om[i] = value;
+    onChange({ ...q, optionMath: om });
+  }
+
   return (
     <div className="card p-4">
       <div className="flex items-start gap-3">
@@ -727,10 +855,42 @@ function QuizCard({
         </div>
 
         <div className="flex-1 min-w-0">
-          <textarea rows={2} value={q.title} onChange={(e) => onChange({ ...q, title: e.target.value })}
+          <textarea rows={2} value={q.title} onFocus={track} onChange={(e) => onChange({ ...q, title: e.target.value })}
             className="input text-sm font-semibold w-full" />
 
+          {q.math !== undefined && (
+            <div className="mt-2">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold text-ink/50">Maths (shown as a picture under the question)</p>
+                <button type="button" onClick={() => onChange({ ...q, math: undefined })}
+                  className="text-xs font-semibold text-red-500 hover:underline">Remove maths</button>
+              </div>
+              <textarea rows={2} data-math="1" value={q.math} onFocus={track}
+                onChange={(e) => onChange({ ...q, math: e.target.value })}
+                placeholder="LaTeX, e.g. \begin{bmatrix} 1 & 0 \\ 0 & 1 \end{bmatrix}"
+                className="input mt-1 w-full font-mono text-xs" />
+              <MathPreview latex={q.math} />
+            </div>
+          )}
+
+          <div className="mt-2 flex flex-wrap gap-2">
+            {q.math === undefined && (
+              <button type="button" onClick={() => { onChange({ ...q, math: "" }); setPaletteOpen(true); }}
+                className="flex items-center gap-1 rounded-full bg-peach/40 px-3 py-1 text-xs font-semibold text-brand-700 hover:bg-peach/60">
+                <Sigma className="h-3 w-3" /> Add maths
+              </button>
+            )}
+            <button type="button" onClick={() => setPaletteOpen((o) => !o)}
+              className="flex items-center gap-1 rounded-full bg-peach/40 px-3 py-1 text-xs font-semibold text-brand-700 hover:bg-peach/60">
+              {paletteOpen ? "Hide symbols" : "Symbols"}
+            </button>
+          </div>
+          {paletteOpen && <MathPalette onText={insertText} onLatex={insertLatex} />}
+
           <div className="mt-2 flex flex-wrap items-center gap-2">
+            {q.level ? (
+              <span className="rounded-full bg-brand/10 px-3 py-1 text-xs font-bold text-brand">BL{q.level}</span>
+            ) : null}
             <select value={q.type} onChange={(e) => {
               const nt = e.target.value as QuizQuestion["type"];
               const updates: Partial<QuizQuestion> = { type: nt };
@@ -738,6 +898,7 @@ function QuizCard({
                 updates.options = ["Option 1", "Option 2", "Option 3", "Option 4"];
               }
               if (nt === "TRUE_FALSE") { updates.options = ["True", "False"]; updates.correctAnswers = ["True"]; }
+              if (nt !== "MCQ" && nt !== "CHECKBOX") updates.optionMath = undefined;
               onChange({ ...q, ...updates });
             }}
               className="rounded-full bg-peach/40 px-3 py-1 text-xs font-semibold text-brand-700 outline-none">
@@ -747,12 +908,6 @@ function QuizCard({
               <option value="SHORT">Short answer</option>
               <option value="PARAGRAPH">Paragraph</option>
             </select>
-
-            {q.level && (
-              <span className="rounded-full bg-brand/10 px-3 py-1 text-xs font-bold text-brand">
-                BL{q.level}
-              </span>
-            )}
 
             <label className="flex items-center gap-1 text-xs text-ink/60 dark:text-[#F5EDE7]/60">
               Points
@@ -778,40 +933,66 @@ function QuizCard({
               <p className="text-xs font-semibold text-ink/50">Options (click to mark correct)</p>
               {opts.map((opt, i) => {
                 const isCorrect = (q.correctAnswers || []).includes(opt);
+                const optMath = q.optionMath?.[i];
                 return (
-                  <div key={i} className="flex items-center gap-2">
-                    <button type="button" onClick={() => toggleCorrect(opt)}
-                      className={`grid h-5 w-5 shrink-0 place-items-center rounded-full border-2 transition ${
-                        isCorrect ? "border-brand bg-brand text-white" : "border-ink/20"
-                      }`}>
-                      {isCorrect && <CheckCircle2 className="h-3 w-3" />}
-                    </button>
-                    <input value={opt} disabled={q.type === "TRUE_FALSE"}
-                      onChange={(e) => {
-                        const next = [...(q.options || [])];
-                        const oldVal = next[i];
-                        next[i] = e.target.value;
-                        const nextCorrect = (q.correctAnswers || []).map((c) => (c === oldVal ? e.target.value : c));
-                        onChange({ ...q, options: next, correctAnswers: nextCorrect });
-                      }}
-                      className="flex-1 rounded-xl border border-brand/10 bg-white dark:bg-[#241218] px-3 py-1.5 text-sm outline-none focus:border-brand disabled:opacity-70" />
-                    {q.type !== "TRUE_FALSE" && (
-                      <button onClick={() => {
-                        const removed = opts[i];
-                        onChange({
-                          ...q,
-                          options: (q.options || []).filter((_, j) => j !== i),
-                          correctAnswers: (q.correctAnswers || []).filter((c) => c !== removed),
-                        });
-                      }} disabled={(q.options?.length ?? 0) <= 2} className="text-ink/30 hover:text-red-500 disabled:opacity-20">
-                        <Trash2 className="h-3.5 w-3.5" />
+                  <div key={i}>
+                    <div className="flex items-center gap-2">
+                      <button type="button" onClick={() => toggleCorrect(opt)}
+                        className={`grid h-5 w-5 shrink-0 place-items-center rounded-full border-2 transition ${
+                          isCorrect ? "border-brand bg-brand text-white" : "border-ink/20"
+                        }`}>
+                        {isCorrect && <CheckCircle2 className="h-3 w-3" />}
                       </button>
+                      <input value={opt} disabled={q.type === "TRUE_FALSE"} onFocus={track}
+                        onChange={(e) => {
+                          const next = [...(q.options || [])];
+                          const oldVal = next[i];
+                          next[i] = e.target.value;
+                          const nextCorrect = (q.correctAnswers || []).map((c) => (c === oldVal ? e.target.value : c));
+                          onChange({ ...q, options: next, correctAnswers: nextCorrect });
+                        }}
+                        className="flex-1 rounded-xl border border-brand/10 bg-white dark:bg-[#241218] px-3 py-1.5 text-sm outline-none focus:border-brand disabled:opacity-70" />
+                      {canOptionMath && (
+                        <button type="button" onClick={() => toggleOptionMath(i)} title="Show this option as a maths picture"
+                          className={`grid h-6 w-6 shrink-0 place-items-center rounded-full ${
+                            optMath != null ? "bg-brand text-white" : "bg-peach/40 text-brand-700"
+                          }`}>
+                          <Sigma className="h-3 w-3" />
+                        </button>
+                      )}
+                      {q.type !== "TRUE_FALSE" && (
+                        <button onClick={() => {
+                          const removed = opts[i];
+                          const nextOm = q.optionMath ? q.optionMath.filter((_, j) => j !== i) : undefined;
+                          onChange({
+                            ...q,
+                            options: (q.options || []).filter((_, j) => j !== i),
+                            correctAnswers: (q.correctAnswers || []).filter((c) => c !== removed),
+                            optionMath: nextOm && nextOm.some((v) => v != null) ? nextOm : undefined,
+                          });
+                        }} disabled={(q.options?.length ?? 0) <= 2} className="text-ink/30 hover:text-red-500 disabled:opacity-20">
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                    {optMath != null && (
+                      <div className="ml-7 mt-1">
+                        <input data-math="1" value={optMath} onFocus={track}
+                          onChange={(e) => setOptionMath(i, e.target.value)}
+                          placeholder="LaTeX for this option"
+                          className="w-full rounded-xl border border-brand/10 bg-white dark:bg-[#241218] px-3 py-1.5 font-mono text-xs outline-none focus:border-brand" />
+                        <MathPreview latex={optMath} />
+                      </div>
                     )}
                   </div>
                 );
               })}
               {q.type !== "TRUE_FALSE" && (
-                <button onClick={() => onChange({ ...q, options: [...(q.options || []), `Option ${(q.options?.length ?? 0) + 1}`] })}
+                <button onClick={() => onChange({
+                  ...q,
+                  options: [...(q.options || []), `Option ${(q.options?.length ?? 0) + 1}`],
+                  optionMath: q.optionMath ? [...q.optionMath, null] : undefined,
+                })}
                   className="flex items-center gap-1 text-xs font-semibold text-brand hover:underline">
                   <Plus className="h-3 w-3" /> Add option
                 </button>
@@ -822,7 +1003,7 @@ function QuizCard({
           {(q.type === "SHORT" || q.type === "PARAGRAPH") && (
             <div className="mt-3">
               <p className="text-xs font-semibold text-ink/50">Model answer</p>
-              <input value={(q.correctAnswers || [])[0] || ""}
+              <input value={(q.correctAnswers || [])[0] || ""} onFocus={track}
                 onChange={(e) => onChange({ ...q, correctAnswers: e.target.value ? [e.target.value] : [] })}
                 placeholder="Correct answer..."
                 className="input mt-1 text-sm" />
@@ -831,7 +1012,7 @@ function QuizCard({
 
           <div className="mt-3">
             <p className="text-xs font-semibold text-ink/50">Explanation (optional)</p>
-            <textarea rows={2} value={q.explanation || ""}
+            <textarea rows={2} value={q.explanation || ""} onFocus={track}
               onChange={(e) => onChange({ ...q, explanation: e.target.value })}
               placeholder="Why is this the correct answer?"
               className="input mt-1 text-xs" />
