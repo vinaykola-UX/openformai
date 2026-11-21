@@ -1,7 +1,7 @@
 import { Type } from "@google/genai";
 import { createHash } from "crypto";
 import { geminiWithFallback, GEMINI_MODEL } from "./gemini-keys.js";
-import { GroqApiError } from "./groq-keys.js";
+import { sanitizeMathQuestion, finalizeMathQuestions } from "./math-shared.js";
 
 export const QUESTIONS_SCHEMA = {
   type: Type.OBJECT,
@@ -46,7 +46,7 @@ Rules:
 // it's folded into the cache key so old cached questions (generated under the
 // previous prompt/schema) are never served again; a version bump makes every
 // old cache entry simply not match anymore, so generation runs fresh instead.
-// (Unchanged on purpose: the Bloom feature below does not alter the old prompt.)
+// (Unchanged on purpose: Bloom and Maths below do not alter the old prompt.)
 const PROMPT_VERSION = "v2";
 
 export const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -98,38 +98,60 @@ export function parseLevelCounts(raw: any): { counts: LevelCounts; total: number
   return { counts, total };
 }
 
+/**
+ * Cache key. Bloom and Maths only extend the key when they are used, so every
+ * existing cache entry (normal quizzes) stays valid and unchanged.
+ */
 export function makeCacheKey(
   text: string,
   count: number,
   difficulty: string,
   questionType: string,
-  levelCounts?: LevelCounts
+  levelCounts?: LevelCounts,
+  mathCount?: number
 ) {
   let raw = `${PROMPT_VERSION}|${text.slice(0, 40000)}|${count}|${difficulty}|${questionType}`;
-  // Only Bloom requests extend the key, so every existing cache entry stays valid.
   if (levelCounts) {
     raw += `|bloom:${[1, 2, 3, 4, 5, 6].map((l) => levelCounts[l] || 0).join(",")}`;
+  }
+  if (mathCount && mathCount > 0) {
+    raw += `|math:${mathCount}`;
   }
   return createHash("sha256").update(raw).digest("hex");
 }
 
-export const BLOOM_SCHEMA = {
-  ...QUESTIONS_SCHEMA,
-  properties: {
-    questions: {
-      type: Type.ARRAY,
-      items: {
-        ...QUESTIONS_SCHEMA.properties.questions.items,
-        properties: {
-          ...QUESTIONS_SCHEMA.properties.questions.items.properties,
-          level: { type: Type.NUMBER },
-        },
-        required: ["type", "title", "correctAnswers", "level"],
+/** Schema builder: the plain schema is returned untouched unless Bloom or Maths is on. */
+export function buildQuestionSchema(opts?: { bloom?: boolean; math?: boolean }) {
+  const bloom = !!opts?.bloom;
+  const math = !!opts?.math;
+  if (!bloom && !math) return QUESTIONS_SCHEMA;
+
+  const base = QUESTIONS_SCHEMA.properties.questions.items;
+  const properties: Record<string, any> = { ...base.properties };
+  const required = [...base.required];
+
+  if (bloom) {
+    properties.level = { type: Type.NUMBER };
+    required.push("level");
+  }
+  if (math) {
+    properties.math = { type: Type.STRING };
+    properties.optionMath = { type: Type.ARRAY, items: { type: Type.STRING } };
+  }
+
+  return {
+    ...QUESTIONS_SCHEMA,
+    properties: {
+      questions: {
+        type: Type.ARRAY,
+        items: { ...base, properties, required },
       },
     },
-  },
-  required: ["questions"],
-};
+    required: ["questions"],
+  };
+}
+
+export const BLOOM_SCHEMA = buildQuestionSchema({ bloom: true });
 
 const BLOOM_SYSTEM_EXTRA = `
 
@@ -148,8 +170,26 @@ ${BLOOM_LEVELS.map((b) => `  BL${b.level} ${b.name}: ${b.verbs}`).join("\n")}
 - Never write "all of the above" or "none of the above".
 - Respond with JSON shaped exactly like {"questions":[{"type":"MCQ","title":"...","options":["...","...","...","..."],"correctAnswers":["..."],"explanation":"...","level":1}]}.`;
 
+const MATH_SYSTEM_EXTRA = `
+
+MATHS NOTATION MODE:
+- A "maths question" is one that must show a matrix or a stacked expression (fraction, determinant, integral or sum with limits, limit, system of equations) that cannot be written in plain text.
+- For a maths question, write the stacked expression as LaTeX in the optional field "math" (no $ signs, standard amsmath, e.g. \\begin{bmatrix} 1 & 0 \\\\ 0 & 1 \\end{bmatrix}, \\frac{a}{b}, \\int_{0}^{1} x^2 \\, dx). Write the "title" so it reads correctly with the picture shown BELOW it (e.g. "The normal form of a matrix is shown below. What is its rank?").
+- If the answer OPTIONS are matrices or stacked expressions, set "options" to ["Option 1","Option 2","Option 3","Option 4"], put the LaTeX of each option in "optionMath" (same order, 4 entries), and make "correctAnswers" the matching label (for example "Option 2").
+- If only some options are stacked, put the LaTeX in optionMath for those and an empty string "" for the plain-text ones.
+- Simple notation must stay plain Unicode text with NO math fields: π, θ, α, β, ≤, ≥, ≠, ∞, ±, ×, ÷, √2, x², x₁, a/b.
+- Keep each LaTeX string under 400 characters, valid and self-contained; no custom macros, no \\text with long sentences.
+- Distractor matrices/expressions must be plausible (typical student mistakes).
+- Questions that are not maths questions must not include "math" or "optionMath".`;
+
+export function buildMathAddendum(mathCount: number) {
+  return `
+
+Exactly ${mathCount} of these questions must be maths questions that use the "math" and/or "optionMath" fields as described in the maths notation rules. Every other question must be plain text without those fields.`;
+}
+
 export function buildBloomPrompt(text: string, counts: LevelCounts) {
-  const total = Object.values(counts).reduce((a, b) => a + b, 0);
+  const total = [1, 2, 3, 4, 5, 6].reduce((sum, l) => sum + (counts[l] || 0), 0);
   const lines = BLOOM_LEVELS.filter((b) => counts[b.level] > 0)
     .map((b) => `- BL${b.level} (${b.name}): exactly ${counts[b.level]} question(s), level = ${b.level}`)
     .join("\n");
@@ -190,6 +230,11 @@ export function arrangeBloomQuestions(questions: any[], counts: LevelCounts): an
   return out;
 }
 
+/** Maths: clean the AI's LaTeX and keep at most `mathCount` maths questions. */
+export function arrangeMathQuestions(questions: any[], mathCount: number): any[] {
+  return finalizeMathQuestions(questions, mathCount);
+}
+
 /** "[BL3] question text" — used only when the form is built. Never double-tags. */
 export function withLevelTag(title: string, level: unknown): string {
   const lv = normalizeLevel(level);
@@ -227,7 +272,7 @@ ${text.slice(0, 40000)}
 """`;
 }
 
-export function parseQuestions(raw: any[], keepLevel = false): any[] {
+export function parseQuestions(raw: any[], keepLevel = false, keepMath = false): any[] {
   return (raw || []).map((q: any) => {
     const options: string[] = q.options || [];
     let correctAnswers: string[] = (q.correctAnswers || []).filter(
@@ -249,7 +294,7 @@ export function parseQuestions(raw: any[], keepLevel = false): any[] {
 
     const lv = keepLevel ? normalizeLevel(q.level) : null;
 
-    return {
+    const parsed: any = {
       type: q.type,
       title: q.title,
       options,
@@ -260,39 +305,49 @@ export function parseQuestions(raw: any[], keepLevel = false): any[] {
       required: true,
       ...(lv ? { level: lv } : {}),
     };
+
+    if (keepMath) {
+      if (q.math !== undefined) parsed.math = q.math;
+      if (q.optionMath !== undefined) parsed.optionMath = q.optionMath;
+      return sanitizeMathQuestion(parsed);
+    }
+    return parsed;
   });
 }
 
-export async function runGeminiQuestions(prompt: string, opts?: { bloom?: boolean }): Promise<any[]> {
-  const bloom = !!opts?.bloom;
+type GenOpts = { bloom?: boolean; math?: boolean };
+
+function systemFor(opts?: GenOpts) {
+  let s = QUESTIONS_SYSTEM;
+  if (opts?.bloom) s += BLOOM_SYSTEM_EXTRA;
+  if (opts?.math) s += MATH_SYSTEM_EXTRA;
+  return s;
+}
+
+export async function runGeminiQuestions(prompt: string, opts?: GenOpts): Promise<any[]> {
   const response = await geminiWithFallback((ai) =>
     ai.models.generateContent({
       model: GEMINI_MODEL,
       contents: [{ role: "user", parts: [{ text: prompt }] }],
       config: {
-        systemInstruction: bloom ? QUESTIONS_SYSTEM + BLOOM_SYSTEM_EXTRA : QUESTIONS_SYSTEM,
+        systemInstruction: systemFor(opts),
         responseMimeType: "application/json",
-        responseSchema: (bloom ? BLOOM_SCHEMA : QUESTIONS_SCHEMA) as any,
+        responseSchema: buildQuestionSchema(opts) as any,
       },
     })
   );
   const parsed = JSON.parse(response.text || "{}");
-  return parseQuestions(parsed.questions, bloom);
+  return parseQuestions(parsed.questions, !!opts?.bloom, !!opts?.math);
 }
 
-export async function runGroqQuestions(
-  prompt: string,
-  apiKey: string,
-  opts?: { bloom?: boolean }
-): Promise<any[]> {
-  const bloom = !!opts?.bloom;
+export async function runGroqQuestions(prompt: string, apiKey: string, opts?: GenOpts): Promise<any[]> {
   const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
       model: "llama-3.3-70b-versatile",
       messages: [
-        { role: "system", content: bloom ? QUESTIONS_SYSTEM + BLOOM_SYSTEM_EXTRA : QUESTIONS_SYSTEM },
+        { role: "system", content: systemFor(opts) },
         { role: "user", content: prompt },
       ],
       response_format: { type: "json_object" },
@@ -301,9 +356,9 @@ export async function runGroqQuestions(
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new GroqApiError(res.status, err?.error?.message || "Request failed");
+    throw new Error(err?.error?.message || `Groq error ${res.status}`);
   }
   const data = await res.json();
   const content = data.choices?.[0]?.message?.content || "{}";
-  return parseQuestions(JSON.parse(content).questions, bloom);
+  return parseQuestions(JSON.parse(content).questions, !!opts?.bloom, !!opts?.math);
 }
