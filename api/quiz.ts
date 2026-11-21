@@ -7,18 +7,27 @@ import { getAdmin } from "./_lib/firebase-admin.js";
 import { resolveExpectedStudents, ROLL_FIELD_REGEX } from "./_lib/rosters.js";
 import { oauthClient } from "./_lib/google-oauth.js";
 import { geminiWithFallback, isQuotaError, GEMINI_MODEL } from "./_lib/gemini-keys.js";
-import { getAllGroqKeys, groqWithFallback, GroqApiError } from "./_lib/groq-keys.js";
 import {
   CACHE_TTL_MS,
   makeCacheKey,
   buildQuestionsPrompt,
   buildBloomPrompt,
+  buildMathAddendum,
   parseLevelCounts,
   arrangeBloomQuestions,
+  arrangeMathQuestions,
   withLevelTag,
   runGeminiQuestions,
   runGroqQuestions,
 } from "./_lib/quiz-shared.js";
+import {
+  mathImageUrl,
+  latexToPlain,
+  prepareMathForForm,
+  degradeAllMath,
+  hasMath,
+  parseMathCount,
+} from "./_lib/math-shared.js";
 import { checkAIRateLimit, RateLimitError, rateLimitResponse } from "./_lib/rate-limit.js";
 
 export const config = { api: { bodyParser: { sizeLimit: "8mb" } } };
@@ -75,7 +84,7 @@ async function runGroqAnalyze(text: string, apiKey: string) {
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new GroqApiError(res.status, err?.error?.message || "Request failed");
+    throw new Error(err?.error?.message || `Groq error ${res.status}`);
   }
   const data = await res.json();
   return JSON.parse(data.choices?.[0]?.message?.content || "{}");
@@ -110,9 +119,10 @@ async function handleAnalyze(req: VercelRequest, res: VercelResponse) {
       }
     }
     if (!parsed) {
-      if (getAllGroqKeys().length > 0) {
+      const groqKey = process.env.GROQ_API_KEY;
+      if (groqKey) {
         try {
-          parsed = await groqWithFallback((apiKey) => runGroqAnalyze(text, apiKey));
+          parsed = await runGroqAnalyze(text, groqKey);
         } catch (groqErr: any) {
           console.error("[quiz:analyze] Groq error:", groqErr.message);
         }
@@ -135,8 +145,9 @@ async function handleAnalyze(req: VercelRequest, res: VercelResponse) {
 async function handleGenerate(req: VercelRequest, res: VercelResponse) {
   try {
     const { uid } = await verifyAuth(req);
-    const { text, count = 5, difficulty = "Mixed", questionType = "Mixed", levelCounts } = (req.body || {}) as {
+    const { text, count = 5, difficulty = "Mixed", questionType = "Mixed", levelCounts, mathCount } = (req.body || {}) as {
       text?: string; count?: number; difficulty?: string; questionType?: string; levelCounts?: Record<string, number>;
+      mathCount?: number;
     };
     if (!text || text.trim().length < 40) {
       return res.status(400).json({ error: "Need study material to generate a quiz." });
@@ -160,10 +171,12 @@ async function handleGenerate(req: VercelRequest, res: VercelResponse) {
     await checkAIRateLimit(uid, "quiz-generate");
 
     const n = bloom ? bloom.total : Math.max(1, Math.min(100, Number(count) || 5));
-    const hasGroqKeys = getAllGroqKeys().length > 0;
+    // Maths (matrices / stacked expressions): 0 = off (old behaviour), max 10, never more than the total.
+    const mathN = Math.min(parseMathCount(mathCount), n);
+    const groqKey = process.env.GROQ_API_KEY;
     const { db } = getAdmin();
 
-    const cacheKey = makeCacheKey(text, n, difficulty, questionType, bloom?.counts);
+    const cacheKey = makeCacheKey(text, n, difficulty, questionType, bloom?.counts, mathN);
     const cacheRef = db.collection("quiz_cache").doc(cacheKey);
     const cacheSnap = await cacheRef.get();
 
@@ -176,8 +189,9 @@ async function handleGenerate(req: VercelRequest, res: VercelResponse) {
       await cacheRef.delete();
     }
 
-    const prompt = bloom ? buildBloomPrompt(text, bloom.counts) : buildQuestionsPrompt(text, n, difficulty, questionType);
-    const aiOpts = bloom ? { bloom: true } : undefined;
+    const basePrompt = bloom ? buildBloomPrompt(text, bloom.counts) : buildQuestionsPrompt(text, n, difficulty, questionType);
+    const prompt = mathN > 0 ? basePrompt + buildMathAddendum(mathN) : basePrompt;
+    const aiOpts = bloom || mathN > 0 ? { bloom: !!bloom, math: mathN > 0 } : undefined;
     let questions: any[] | null = null;
     let usedModel = "";
 
@@ -190,18 +204,23 @@ async function handleGenerate(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    if (!questions && hasGroqKeys) {
+    if (!questions && groqKey) {
       try {
-        questions = await groqWithFallback((apiKey) => runGroqQuestions(prompt, apiKey, aiOpts));
+        questions = await runGroqQuestions(prompt, groqKey, aiOpts);
         usedModel = "groq-llama-3.3-70b";
       } catch (groqErr: any) {
         console.error("[quiz:generate] Groq error:", groqErr.message);
       }
     }
 
-    // Bloom: group by level, cap per level, order BL1 → BL6
+    // Bloom: group by level, cap per level, order BL1 -> BL6
     if (bloom && questions) {
       questions = arrangeBloomQuestions(questions, bloom.counts);
+    }
+
+    // Maths: clean the LaTeX and keep at most mathN maths questions
+    if (mathN > 0 && questions) {
+      questions = arrangeMathQuestions(questions, mathN);
     }
 
     if (!questions || questions.length === 0) {
@@ -225,7 +244,6 @@ async function handleGenerate(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({ error: err.message || "Quiz generation failed" });
   }
 }
-
 // ── action: "create-form" ────────────────────────────────────────────────
 
 type QuizQuestion = {
@@ -237,7 +255,17 @@ type QuizQuestion = {
   points?: number;
   required?: boolean;
   level?: number;
+  math?: string; // LaTeX shown as a picture under the question text
+  optionMath?: (string | null)[]; // LaTeX per option; non-null = that option is a picture
 };
+
+function mathImage(latex: string) {
+  return {
+    sourceUri: mathImageUrl(latex),
+    altText: latexToPlain(latex).slice(0, 250),
+    properties: { alignment: "LEFT" },
+  };
+}
 
 function buildFormItem(q: QuizQuestion, index: number, isQuiz: boolean) {
   const required = q.required ?? true;
@@ -260,6 +288,7 @@ function buildFormItem(q: QuizQuestion, index: number, isQuiz: boolean) {
         item: {
           title: itemTitle,
           questionItem: {
+            ...(q.math ? { image: mathImage(q.math) } : {}),
             question: {
               required,
               textQuestion: { paragraph: q.type === "PARAGRAPH" },
@@ -279,11 +308,15 @@ function buildFormItem(q: QuizQuestion, index: number, isQuiz: boolean) {
       item: {
         title: itemTitle,
         questionItem: {
+          ...(q.math ? { image: mathImage(q.math) } : {}),
           question: {
             required,
             choiceQuestion: {
               type: q.type === "CHECKBOX" ? "CHECKBOX" : "RADIO",
-              options: options.map((value) => ({ value })),
+              options: options.map((value, i) => {
+                const om = q.optionMath?.[i];
+                return om ? { value, image: mathImage(om) } : { value };
+              }),
               shuffle: false,
             },
             grading: isQuiz ? grading : undefined,
@@ -364,15 +397,30 @@ async function handleCreateForm(req: VercelRequest, res: VercelResponse) {
   const created = await forms.forms.create({ requestBody: { info: { title } } });
   const formId = created.data.formId!;
 
-  const requests: any[] = [];
-  if (isQuiz) {
-    requests.push({
-      updateSettings: { settings: { quizSettings: { isQuiz: true } }, updateMask: "quizSettings.isQuiz" },
-    });
-  }
-  allQuestions.forEach((q, i) => requests.push(buildFormItem(q, i, isQuiz)));
+  const makeRequests = (qs: QuizQuestion[]) => {
+    const reqs: any[] = [];
+    if (isQuiz) {
+      reqs.push({
+        updateSettings: { settings: { quizSettings: { isQuiz: true } }, updateMask: "quizSettings.isQuiz" },
+      });
+    }
+    qs.forEach((q, i) => reqs.push(buildFormItem(q, i, isQuiz)));
+    return reqs;
+  };
 
-  await forms.forms.batchUpdate({ formId, requestBody: { requests } });
+  // Maths pictures: clean the LaTeX and cap at 10 maths questions. Quizzes without maths pass through untouched.
+  let finalQuestions: QuizQuestion[] = prepareMathForForm(allQuestions);
+
+  try {
+    await forms.forms.batchUpdate({ formId, requestBody: { requests: makeRequests(finalQuestions) } });
+  } catch (batchErr: any) {
+    // If a maths picture could not be used, build the same form with plain-text maths instead of failing.
+    // (batchUpdate is all-or-nothing, so the form is still empty and safe to fill again.)
+    if (!finalQuestions.some(hasMath)) throw batchErr;
+    console.warn("[quiz:create-form] maths images failed, falling back to text:", batchErr?.message);
+    finalQuestions = degradeAllMath(finalQuestions);
+    await forms.forms.batchUpdate({ formId, requestBody: { requests: makeRequests(finalQuestions) } });
+  }
 
   const full = await forms.forms.get({ formId });
   const responderUri = full.data.responderUri!;
@@ -380,7 +428,7 @@ async function handleCreateForm(req: VercelRequest, res: VercelResponse) {
 
   await db.collection("forms").add({
     uid, title, googleFormId: formId, responderUri, editUri,
-    questionCount: allQuestions.length, questions: allQuestions,
+    questionCount: finalQuestions.length, questions: finalQuestions,
     source: "ai-quiz", quizMode: isQuiz, isQuiz,
     expectedStudents: resolvedStudents,
     expiresAt: expiresAt ? new Date(expiresAt) : null,
